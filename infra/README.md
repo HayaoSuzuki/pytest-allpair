@@ -10,4 +10,4 @@ The pytest-allpair rulesets follow the hoimin configuration. [hoimin rulesets](h
 
 The rulesets have empty bypass lists. CI reports `CI result`, and `main` has no required status checks. GitHub deletes merged branches, offers to update PR branches, and enables Discussions. Wiki and Projects are disabled.
 
-The `Wheel builds` workflow uploads wheels as artifacts. Use `pytest-allpair-release-state` if the project starts tracking release state in Git.
+The `Wheel builds` workflow uploads preview wheels as artifacts. The `Package release` workflow creates GitHub Releases and promotes verified wheels through the `testpypi` and `pypi` environments, each restricted to `main`. See the [publishing guide](../docs/development/guides/publishing.md) for Trusted Publisher settings and release verification. Use `pytest-allpair-release-state` if the project starts tracking release state in Git.

@@ -29,10 +29,16 @@ include = [
     { path = "formal/coverage_oracle.rs", format = "sdist" },
 ]
 
+[tool.maturin.sbom]
+rust = true
+auditwheel = true
+
 [dependency-groups]
+release = ["pypi-attestations>=0.0.30,<1"]
 test = ["hypothesis>=6.170.1,<7", "pytest-randomly>=5,<6"]
 dev = [
     { include-group = "test" },
+    { include-group = "release" },
     "mkdocs>=1.6,<2",
     "ruff>=0.17,<0.18",
     "ty>=0.0.80",
@@ -61,7 +67,7 @@ convention = "pep257"
 [tool.ty.environment]
 python-version = "3.11"
 python-platform = "all"
-root = ["crates/pytest-allpair-python/python"]
+root = [".", "crates/pytest-allpair-python/python"]
 
 [tool.ty.rules]
 all = "error"

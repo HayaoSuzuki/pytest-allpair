@@ -1,0 +1,57 @@
+name: Wheel builds
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wheel:
+    name: Wheel on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Build the Linux wheel with the manylinux toolchain
+        if: runner.os == 'Linux'
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.16.0
+          rust-toolchain: '1.100.0'
+          target: x86_64
+          manylinux: '2_28'
+          args: --release --locked --out dist
+      - name: Verify the Linux platform tag
+        if: runner.os == 'Linux'
+        run: compgen -G 'dist/*manylinux_2_28*.whl' > /dev/null
+      - name: Build the native macOS or Windows wheel
+        if: runner.os != 'Linux'
+        run: uvx maturin@1.16.0 build --release --locked --out dist --interpreter python
+      - name: Validate wheel metadata and the embedded SBOM
+        shell: bash
+        run: python -m tools.release_assets wheel dist/*.whl
+      - name: Test automatic plugin discovery from the wheel
+        shell: bash
+        run: python -I tools/wheel_smoke.py dist/*.whl
+      - name: Test installation from a source distribution
+        if: runner.os == 'Linux'
+        run: |
+          uvx maturin@1.16.0 sdist --out dist
+          python -I tools/wheel_smoke.py dist/*.tar.gz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheel-${{ matrix.os }}
+          path: dist/*.whl
+          if-no-files-found: error

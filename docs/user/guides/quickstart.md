@@ -1,11 +1,9 @@
 # Quick start
 
-Use a standard (GIL-enabled) build of CPython 3.11 through 3.15 and pytest 8.4.x or 9.x. You need the Rust toolchain to build from source. Run these commands from the root of the checkout.
+Use a standard (GIL-enabled) build of CPython 3.11 through 3.15 and pytest 8.4.x or 9.x. Add the plugin as a development dependency in your project.
 
 ```sh
-uv venv
-uv pip install .
-uv run --no-sync pytest
+uv add --dev pytest-allpair
 ```
 
 Declare three factors with two values each. By default, the collected cases exercise all four pairs of values for any two factors you choose.
@@ -20,7 +18,7 @@ import pytest
 def test_storage(backend, cache, mode): ...
 ```
 
-Run `pytest --collect-only -q` to inspect the generated cases. Set `order=3` to cover combinations of three factors. Specify invalid combinations by argument name and value.
+Run `uv run pytest --collect-only -q` to inspect the generated cases. Set `order=3` to cover combinations of three factors. Specify invalid combinations by argument name and value.
 
 ```python
 @pytest.mark.pairwise(order=3, exclude=[{"backend": "sqlite", "replicas": 3}])

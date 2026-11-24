@@ -2,12 +2,17 @@
 
 pytest-allpair generates test cases during pytest collection to cover every feasible n-way combination. By default, it covers pairs of factors. The plugin uses pytest's handling of Python values, fixtures, test IDs, and marks.
 
-To install from source, you need Rust and a standard (GIL-enabled) build of CPython 3.11 through 3.15.
+## Installation
+
+Use a standard (GIL-enabled) build of CPython 3.11 through 3.15. Add a released version from PyPI as a development dependency in your project.
 
 ```sh
-uv venv
-uv pip install .
+uv add --dev pytest-allpair
 ```
+
+Release builds target Linux x86-64 (manylinux 2.28), macOS Arm64, and Windows x86-64.
+
+## Usage
 
 ```python
 import pytest

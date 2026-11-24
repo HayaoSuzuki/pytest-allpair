@@ -1,54 +1,365 @@
-name: Wheel builds
+name: Package release
 
 on:
-  workflow_call:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Preview builds, create a GitHub release, or promote an existing release
+        type: choice
+        options: [preview, release, testpypi, pypi]
+        default: preview
+      tag:
+        description: Release tag (required except for preview)
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: package-release-${{ inputs.tag || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
-  wheel:
-    name: Wheel on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-15, windows-latest]
+  config:
+    name: Validate version and release source
+    if: github.ref == 'refs/heads/main' || inputs.operation == 'preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.source.outputs.tag }}
+      commit: ${{ steps.source.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.11'
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - name: Build the Linux wheel with the manylinux toolchain
-        if: runner.os == 'Linux'
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
-        with:
-          maturin-version: v1.16.0
-          rust-toolchain: '1.100.0'
-          target: x86_64
-          manylinux: '2_28'
-          args: --release --locked --out dist
-      - name: Verify the Linux platform tag
-        if: runner.os == 'Linux'
-        run: compgen -G 'dist/*manylinux_2_28*.whl' > /dev/null
-      - name: Build the native macOS or Windows wheel
-        if: runner.os != 'Linux'
-        run: uvx maturin@1.16.0 build --release --locked --out dist --interpreter python
-      - name: Test automatic plugin discovery from the wheel
-        shell: bash
-        run: python -I tools/wheel_smoke.py dist/*.whl
-      - name: Test installation from a source distribution
-        if: runner.os == 'Linux'
+      - name: Resolve the release commit
+        id: source
+        env:
+          OPERATION: ${{ inputs.operation }}
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
-          uvx maturin@1.16.0 sdist --out dist
-          python -I tools/wheel_smoke.py dist/*.tar.gz
+          if [[ "$OPERATION" == 'preview' || "$OPERATION" == 'release' ]]; then
+            tag="$(python3 -m tools.release_assets tag)"
+            if [[ -n "$REQUESTED_TAG" ]]; then
+              test "$tag" = "$REQUESTED_TAG"
+            fi
+          else
+            tag="$REQUESTED_TAG"
+          fi
+          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          commit="$GITHUB_SHA"
+          if [[ "$OPERATION" != 'preview' ]]; then
+            test "$tag" = "$REQUESTED_TAG"
+            git fetch --depth 1 --no-tags origin "refs/tags/$tag"
+            commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          fi
+          if [[ "$OPERATION" == 'release' ]]; then
+            test "$commit" = "$GITHUB_SHA"
+          fi
+          {
+            echo "tag=$tag"
+            echo "commit=$commit"
+          } >> "$GITHUB_OUTPUT"
+
+  wheels:
+    name: Build and smoke test the wheels
+    needs: config
+    if: inputs.operation == 'preview' || inputs.operation == 'release'
+    uses: ./.github/workflows/wheels.yml
+
+  assemble:
+    name: Validate release files and extract SBOMs
+    needs: [config, wheels]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: wheel-*
+          merge-multiple: true
+          path: dist
+      - env:
+          TAG: ${{ needs.config.outputs.tag }}
+        run: python3 -m tools.release_assets prepare dist --tag "$TAG"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: wheel-${{ matrix.os }}
-          path: dist/*.whl
+          name: release-assets
+          path: dist
           if-no-files-found: error
+
+  attest-inventory:
+    name: Attest the release inventory
+    needs: assemble
+    if: inputs.operation == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-assets
+          path: dist
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        id: inventory
+        with:
+          subject-path: dist/*
+      - env:
+          BUNDLE: ${{ steps.inventory.outputs.bundle-path }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for asset in dist/*; do
+            gh attestation verify "$asset" --bundle "$BUNDLE" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest "$GITHUB_SHA" --signer-digest "$GITHUB_SHA" \
+              --source-ref refs/heads/main --deny-self-hosted-runners
+          done
+
+  attest-wheels:
+    name: Attest wheel and SBOM (${{ matrix.platform }})
+    needs: [config, assemble]
+    if: inputs.operation == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux, macos, windows]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-assets
+          path: dist
+      - name: Resolve wheel and embedded Cargo SBOM
+        id: asset
+        env:
+          TAG: ${{ needs.config.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          wheel="$(python3 -m tools.release_assets platform dist --tag "$TAG" --platform "$PLATFORM")"
+          {
+            echo "wheel=$wheel"
+            echo "sbom=$wheel.pytest-allpair-python.cyclonedx.json"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        id: build
+        with:
+          subject-path: ${{ steps.asset.outputs.wheel }}
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        id: cargo-sbom
+        with:
+          subject-path: ${{ steps.asset.outputs.wheel }}
+          sbom-path: ${{ steps.asset.outputs.sbom }}
+      - name: Verify and save the single-wheel build signature
+        env:
+          BUNDLE: ${{ steps.build.outputs.bundle-path }}
+          SBOM_BUNDLE: ${{ steps.cargo-sbom.outputs.bundle-path }}
+          WHEEL: ${{ steps.asset.outputs.wheel }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "$WHEEL" --bundle "$BUNDLE" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-digest "$GITHUB_SHA" --signer-digest "$GITHUB_SHA" \
+            --source-ref refs/heads/main --deny-self-hosted-runners
+          gh attestation verify "$WHEEL" --bundle "$SBOM_BUNDLE" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-digest "$GITHUB_SHA" --signer-digest "$GITHUB_SHA" \
+            --source-ref refs/heads/main --deny-self-hosted-runners \
+            --predicate-type https://cyclonedx.org/bom
+          mkdir proofs
+          cp "$BUNDLE" "proofs/$(basename "$WHEEL").sigstore.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-proof-${{ matrix.platform }}
+          path: proofs/
+          if-no-files-found: error
+
+  github-release:
+    name: Publish the verified GitHub release
+    needs: [config, assemble, attest-inventory, attest-wheels]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-assets
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: build-proof-*
+          merge-multiple: true
+          path: proofs
+      - env:
+          TAG: ${{ needs.config.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m tools.release_assets verify dist --tag "$TAG"
+          for wheel in dist/*.whl; do
+            test -s "proofs/$(basename "$wheel").sigstore.json"
+          done
+          gh release create "$TAG" dist/* proofs/*.sigstore.json \
+            --title "$TAG" --generate-notes --verify-tag
+
+  stage:
+    name: Verify and stage the original GitHub release
+    needs: config
+    if: inputs.operation == 'testpypi' || inputs.operation == 'pypi'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      attestations: read
+    outputs:
+      testpypi-present: ${{ steps.upload.outputs.testpypi-present }}
+      pypi-present: ${{ steps.upload.outputs.pypi-present }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --python 3.13 --locked --only-group release
+      - name: Verify the release bytes and inspect the indexes
+        id: upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.config.outputs.tag }}
+          COMMIT: ${{ needs.config.outputs.commit }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          status="$(gh release view "$TAG" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')"
+          test "$status" = false
+          gh release download "$TAG" --dir incoming --pattern '*.whl' --pattern '*.whl.sigstore.json'
+          uv run --locked --no-sync python -m tools.pypi_pipeline stage incoming \
+            --tag "$TAG" --commit "$COMMIT" --output upload
+          testpypi_present="$(uv run --locked --no-sync python -m tools.pypi_pipeline inspect upload \
+            --index testpypi --tag "$TAG" --commit "$COMMIT")"
+          echo "testpypi-present=$testpypi_present" >> "$GITHUB_OUTPUT"
+          if [[ "$OPERATION" == 'pypi' ]]; then
+            pypi_present="$(uv run --locked --no-sync python -m tools.pypi_pipeline inspect upload \
+              --index pypi --tag "$TAG" --commit "$COMMIT")"
+            echo "pypi-present=$pypi_present" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pypi-wheels
+          path: upload/
+          if-no-files-found: error
+
+  testpypi-publish:
+    name: Upload wheels to testpypi
+    needs: [stage]
+    if: ${{ needs.stage.outputs.testpypi-present == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: pypi-wheels
+          path: upload
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: upload
+          repository-url: https://test.pypi.org/legacy/
+          attestations: true
+
+  verify-testpypi:
+    name: Verify testpypi wheels and attestations
+    needs: [config, stage, testpypi-publish]
+    if: >-
+      ${{ !cancelled() &&
+      needs.stage.result == 'success' &&
+      (needs.testpypi-publish.result == 'success' || needs.testpypi-publish.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --python 3.13 --locked --only-group release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: pypi-wheels
+          path: upload
+      - name: Verify the index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.config.outputs.tag }}
+          COMMIT: ${{ needs.config.outputs.commit }}
+        run: |
+          uv run --locked --no-sync python -m tools.pypi_pipeline verify upload \
+            --index testpypi --tag "$TAG" --commit "$COMMIT"
+
+  pypi-publish:
+    name: Upload wheels to pypi
+    needs: [stage, verify-testpypi]
+    if: ${{ inputs.operation == 'pypi' && needs.stage.outputs.pypi-present == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: pypi-wheels
+          path: upload
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: upload
+          repository-url: https://upload.pypi.org/legacy/
+          attestations: true
+
+  verify-pypi:
+    name: Verify pypi wheels and attestations
+    needs: [config, stage, verify-testpypi, pypi-publish]
+    if: >-
+      ${{ !cancelled() && inputs.operation == 'pypi' && needs.verify-testpypi.result == 'success' &&
+      needs.stage.result == 'success' &&
+      (needs.pypi-publish.result == 'success' || needs.pypi-publish.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --python 3.13 --locked --only-group release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: pypi-wheels
+          path: upload
+      - name: Verify the index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.config.outputs.tag }}
+          COMMIT: ${{ needs.config.outputs.commit }}
+        run: |
+          uv run --locked --no-sync python -m tools.pypi_pipeline verify upload \
+            --index pypi --tag "$TAG" --commit "$COMMIT"

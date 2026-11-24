@@ -99,7 +99,7 @@ jobs:
 
   wheels:
     name: Wheel verification
-    uses: ./.github/workflows/release.yml
+    uses: ./.github/workflows/wheels.yml
 
   result:
     name: CI result
