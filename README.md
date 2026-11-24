@@ -1,8 +1,8 @@
 # pytest-allpair
 
-pytest の収集時に、制約を満たす n 因子の組を網羅するテストケースを生成するプラグインです。既定では因子を二つずつ組み合わせて網羅します。Python の値、fixture、ID、マークは pytest を通じて扱います。
+pytest-allpair generates test cases during pytest collection to cover every feasible n-way combination. By default, it covers pairs of factors. The plugin uses pytest's handling of Python values, fixtures, test IDs, and marks.
 
-ソースからインストールするには Rust と通常ビルドの CPython 3.11〜3.15 が必要です。
+To install from source, you need Rust and a standard (GIL-enabled) build of CPython 3.11 through 3.15.
 
 ```sh
 uv venv
@@ -21,10 +21,10 @@ def test_storage(os, filesystem, cache):
     assert (os, filesystem) != ("linux", "ntfs")
 ```
 
-通常の `pytest.mark.parametrize` を同じテストに使うと、その候補は生成された全ケースと組み合わさります。
+If the same test also uses `pytest.mark.parametrize`, each of its parameter sets runs with every generated case.
 
-- [クイックスタート](docs/user/guides/quickstart.md)
-- [マークの仕様](docs/user/reference/markers.md)
-- [生成器と pytest の設計](docs/development/architecture/pairwise-plugin.md)
-- [検証手順](docs/development/guides/verification.md)
-- [ライセンス](LICENSE)
+- [Quick start](docs/user/guides/quickstart.md)
+- [Marker reference](docs/user/reference/markers.md)
+- [Generator and pytest integration design](docs/development/architecture/pairwise-plugin.md)
+- [Verification guide](docs/development/guides/verification.md)
+- [License](LICENSE)
