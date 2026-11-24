@@ -9,3 +9,4 @@ nav:
   - Development:
       - Design: development/architecture/pairwise-plugin.md
       - Verification: development/guides/verification.md
+      - Publishing: development/guides/publishing.md
