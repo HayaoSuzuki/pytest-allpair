@@ -1,6 +1,8 @@
 name: Package release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       operation:
@@ -9,7 +11,7 @@ on:
         options: [preview, release, testpypi, pypi]
         default: preview
       tag:
-        description: Release tag (required except for preview)
+        description: Release tag (optional version override for preview)
         type: string
 
 permissions:
@@ -22,50 +24,90 @@ concurrency:
 jobs:
   config:
     name: Validate version and release source
-    if: github.ref == 'refs/heads/main' || inputs.operation == 'preview'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.operation == 'preview') ||
+      (github.repository == 'HayaoSuzuki/pytest-allpair' && github.ref == 'refs/heads/main' &&
+       (github.event_name == 'workflow_dispatch' || vars.PYPI_AUTO_PUBLISH == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       tag: ${{ steps.source.outputs.tag }}
       commit: ${{ steps.source.outputs.commit }}
+      operation: ${{ steps.source.outputs.operation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Resolve the release commit
         id: source
         env:
-          OPERATION: ${{ inputs.operation }}
+          OPERATION: ${{ github.event_name == 'push' && 'automatic' || inputs.operation }}
           REQUESTED_TAG: ${{ inputs.tag }}
         run: |
-          if [[ "$OPERATION" == 'preview' || "$OPERATION" == 'release' ]]; then
-            tag="$(python3 -m tools.release_assets tag)"
-            if [[ -n "$REQUESTED_TAG" ]]; then
-              test "$tag" = "$REQUESTED_TAG"
-            fi
-          else
-            tag="$REQUESTED_TAG"
-          fi
-          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           commit="$GITHUB_SHA"
-          if [[ "$OPERATION" != 'preview' ]]; then
-            test "$tag" = "$REQUESTED_TAG"
-            git fetch --depth 1 --no-tags origin "refs/tags/$tag"
-            commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
-          fi
+          case "$OPERATION" in
+            preview)
+              tag="${REQUESTED_TAG:-$(python3 -m tools.release_assets tag)}"
+              ;;
+            automatic)
+              tag="$(python3 -m tools.release_version tag "$commit")"
+              ;;
+            release|testpypi|pypi)
+              tag="$REQUESTED_TAG"
+              [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+              commit="$(git rev-parse "refs/tags/$tag^{commit}")"
+              git merge-base --is-ancestor "$commit" "$GITHUB_SHA"
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           if [[ "$OPERATION" == 'release' ]]; then
             test "$commit" = "$GITHUB_SHA"
           fi
           {
             echo "tag=$tag"
             echo "commit=$commit"
+            echo "operation=$OPERATION"
           } >> "$GITHUB_OUTPUT"
+
+  reserve:
+    name: Reserve the automatic release tag
+    needs: config
+    if: needs.config.outputs.operation == 'automatic'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create or validate the immutable tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.config.outputs.tag }}
+          COMMIT: ${{ needs.config.outputs.commit }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$COMMIT" = "$GITHUB_SHA"
+          tag_ref="repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG"
+          if ! assigned="$(gh api "$tag_ref" --jq .object.sha)"; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f "ref=refs/tags/$TAG" -f "sha=$COMMIT" >/dev/null || true
+            assigned="$(gh api "$tag_ref" --jq .object.sha)"
+          fi
+          test "$assigned" = "$COMMIT"
 
   wheels:
     name: Build and smoke test the wheels
-    needs: config
-    if: inputs.operation == 'preview' || inputs.operation == 'release'
+    needs: [config, reserve]
+    if: >-
+      !cancelled() && needs.config.result == 'success' &&
+      (needs.config.outputs.operation == 'preview' || needs.config.outputs.operation == 'release' ||
+       needs.reserve.result == 'success')
     uses: ./.github/workflows/wheels.yml
+    with:
+      release-tag: ${{ needs.config.outputs.tag }}
 
   assemble:
     name: Validate release files and extract SBOMs
@@ -92,8 +134,8 @@ jobs:
 
   attest-inventory:
     name: Attest the release inventory
-    needs: assemble
-    if: inputs.operation == 'release'
+    needs: [config, assemble]
+    if: needs.config.outputs.operation == 'release' || needs.config.outputs.operation == 'automatic'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -123,7 +165,7 @@ jobs:
   attest-wheels:
     name: Attest wheel and SBOM (${{ matrix.platform }})
     needs: [config, assemble]
-    if: inputs.operation == 'release'
+    if: needs.config.outputs.operation == 'release' || needs.config.outputs.operation == 'automatic'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -219,8 +261,11 @@ jobs:
 
   stage:
     name: Verify and stage the original GitHub release
-    needs: config
-    if: inputs.operation == 'testpypi' || inputs.operation == 'pypi'
+    needs: [config, github-release]
+    if: >-
+      !cancelled() && needs.config.result == 'success' &&
+      (needs.config.outputs.operation == 'testpypi' || needs.config.outputs.operation == 'pypi' ||
+       (needs.config.outputs.operation == 'automatic' && needs.github-release.result == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -241,7 +286,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.config.outputs.tag }}
           COMMIT: ${{ needs.config.outputs.commit }}
-          OPERATION: ${{ inputs.operation }}
+          OPERATION: ${{ needs.config.outputs.operation }}
         run: |
           status="$(gh release view "$TAG" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')"
           test "$status" = false
@@ -251,7 +296,7 @@ jobs:
           testpypi_present="$(uv run --locked --no-sync python -m tools.pypi_pipeline inspect upload \
             --index testpypi --tag "$TAG" --commit "$COMMIT")"
           echo "testpypi-present=$testpypi_present" >> "$GITHUB_OUTPUT"
-          if [[ "$OPERATION" == 'pypi' ]]; then
+          if [[ "$OPERATION" == 'pypi' || "$OPERATION" == 'automatic' ]]; then
             pypi_present="$(uv run --locked --no-sync python -m tools.pypi_pipeline inspect upload \
               --index pypi --tag "$TAG" --commit "$COMMIT")"
             echo "pypi-present=$pypi_present" >> "$GITHUB_OUTPUT"
@@ -264,11 +309,14 @@ jobs:
 
   testpypi-publish:
     name: Upload wheels to testpypi
-    needs: [stage]
+    needs: [config, stage]
     if: ${{ needs.stage.outputs.testpypi-present == 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: testpypi
+    concurrency:
+      group: upload-testpypi-${{ needs.config.outputs.tag }}
+      cancel-in-progress: false
     permissions:
       id-token: write
     steps:
@@ -315,11 +363,14 @@ jobs:
 
   pypi-publish:
     name: Upload wheels to pypi
-    needs: [stage, verify-testpypi]
-    if: ${{ inputs.operation == 'pypi' && needs.stage.outputs.pypi-present == 'false' }}
+    needs: [config, stage, verify-testpypi]
+    if: ${{ needs.stage.outputs.pypi-present == 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
+    concurrency:
+      group: upload-pypi-${{ needs.config.outputs.tag }}
+      cancel-in-progress: false
     permissions:
       id-token: write
     steps:
@@ -337,7 +388,8 @@ jobs:
     name: Verify pypi wheels and attestations
     needs: [config, stage, verify-testpypi, pypi-publish]
     if: >-
-      ${{ !cancelled() && inputs.operation == 'pypi' && needs.verify-testpypi.result == 'success' &&
+      ${{ !cancelled() && (needs.config.outputs.operation == 'pypi' ||
+      needs.config.outputs.operation == 'automatic') && needs.verify-testpypi.result == 'success' &&
       needs.stage.result == 'success' &&
       (needs.pypi-publish.result == 'success' || needs.pypi-publish.result == 'skipped') }}
     runs-on: ubuntu-latest
