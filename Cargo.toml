@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/pytest-allpair-core"]
+members = ["crates/pytest-allpair-core", "crates/pytest-allpair-python"]
 exclude = ["fuzz"]
 resolver = "3"
 

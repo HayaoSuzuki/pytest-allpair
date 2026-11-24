@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.11,<2"]
+build-backend = "maturin"
+
+[project]
+name = "pytest-allpair"
+version = "0.1.0"
+description = "Constraint-aware n-way parametrization for pytest"
+readme = "README.md"
+requires-python = ">=3.11,<3.16"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["pytest>=8.4,<10"]
+
+[project.urls]
+Repository = "https://github.com/HayaoSuzuki/pytest-allpair"
+Issues = "https://github.com/HayaoSuzuki/pytest-allpair/issues"
+
+[project.entry-points.pytest11]
+allpair = "pytest_allpair.plugin"
+
+[tool.maturin]
+bindings = "pyo3"
+manifest-path = "crates/pytest-allpair-python/Cargo.toml"
+python-source = "crates/pytest-allpair-python/python"
+module-name = "pytest_allpair._native"
