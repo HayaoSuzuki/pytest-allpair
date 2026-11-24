@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: package-release-${{ inputs.tag || github.run_id }}
-  cancel-in-progress: false
+  group: package-release-${{ (inputs.operation != 'preview' && inputs.tag) || github.run_id }}
+  queue: max
 
 jobs:
   config:
@@ -266,8 +266,16 @@ jobs:
           for wheel in dist/*.whl; do
             test -s "proofs/$(basename "$wheel").sigstore.json"
           done
-          gh release create "$TAG" dist/* proofs/*.sigstore.json \
-            --title "$TAG" --generate-notes --verify-tag
+          if ! gh release create "$TAG" dist/* proofs/*.sigstore.json \
+            --title "$TAG" --generate-notes --verify-tag; then
+            # Another run may have published this tag. Promotion will verify
+            # the original signatures before it uploads those wheel bytes.
+            published="$(gh release view "$TAG" --json isDraft,isPrerelease,assets \
+              --jq '(.isDraft or .isPrerelease or
+                ([.assets[].name | select(endswith(".whl"))] | length != 3) or
+                ([.assets[].name | select(endswith(".whl.sigstore.json"))] | length != 3)) | not')"
+            test "$published" = true
+          fi
 
   dispatch-pypi:
     name: Start PyPI promotion for this release
