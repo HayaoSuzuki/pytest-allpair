@@ -28,10 +28,11 @@ def release_version(tag: str) -> str:
     return tag[1:]
 
 
-def manifest_tag() -> str:
+def manifest_tag(source: str | None = None) -> str:
     """Read the release tag from the project's package version."""
-    with Path("pyproject.toml").open("rb") as file:
-        metadata: object = tomllib.load(file)
+    if source is None:
+        source = Path("pyproject.toml").read_text(encoding="utf-8")
+    metadata: object = tomllib.loads(source)
     version = object_map(object_map(metadata).get("project")).get("version")
     if not isinstance(version, str):
         message = "missing project.version"

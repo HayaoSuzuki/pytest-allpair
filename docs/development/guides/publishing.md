@@ -47,7 +47,7 @@ gh workflow run release.yml --repo HayaoSuzuki/pytest-allpair --ref main \
 After the GitHub Release succeeds, dispatch `operation=testpypi`. Review the
 verification results, then dispatch `operation=pypi` to promote the release.
 The production job requires fresh verification of the complete TestPyPI
-publication. Release and promotion run on demand.
+publication.
 
 ```sh
 gh workflow run release.yml --repo HayaoSuzuki/pytest-allpair --ref main \
@@ -55,6 +55,33 @@ gh workflow run release.yml --repo HayaoSuzuki/pytest-allpair --ref main \
 gh workflow run release.yml --repo HayaoSuzuki/pytest-allpair --ref main \
   -f operation=pypi -f tag=v0.1.0
 ```
+
+## Automatic releases from main
+
+After the first release has passed verification on both indexes, enable
+`PYPI_AUTO_PUBLISH` in the repository's Actions variables.
+
+```sh
+gh variable set PYPI_AUTO_PUBLISH --repo HayaoSuzuki/pytest-allpair --body true
+```
+
+Each update to `main`, including a merged pull request, starts the release
+workflow. It reserves the version tag, builds and verifies the three wheels,
+and publishes the GitHub Release. It then dispatches a separate promotion run
+on `main`. That run verifies TestPyPI before publishing to PyPI. Track both runs
+to confirm publication. Automatic and manual promotion of the same tag run
+one at a time.
+
+The version advances one patch per first-parent commit after `v0.1.0`. A higher
+committed version sets a new minimum. Runs can finish in either order and each
+commit keeps the same version on retry. The wheel build sets that version in
+the manifests and lockfiles in its temporary checkout. The build attestation
+identifies the original `main` commit containing the versioning code.
+
+Set `PYPI_AUTO_PUBLISH` to `false` to pause new automatic runs. For a build
+failure before the GitHub Release exists, rerun the failed jobs for that
+commit. If the GitHub Release already exists, dispatch `operation=pypi`
+with its tag to resume promotion from the existing signed wheels.
 
 ## Verify artifacts
 
