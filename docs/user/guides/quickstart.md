@@ -1,6 +1,12 @@
 # Quick start
 
-Use a standard (GIL-enabled) build of CPython 3.11 through 3.15 and pytest 8.4.x or 9.x. You need the Rust toolchain to build from source. Run these commands from the root of the checkout.
+Use a standard (GIL-enabled) build of CPython 3.11 through 3.15 and pytest 8.4.x or 9.x. Install a released version from PyPI in the environment where you run pytest.
+
+```sh
+python -m pip install pytest-allpair
+```
+
+To try the current checkout, install the Rust toolchain and run these commands from the repository root to build from source and run the project's tests.
 
 ```sh
 uv venv
