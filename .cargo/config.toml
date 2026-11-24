@@ -1,0 +1,2 @@
+[alias]
+check-all = "clippy --workspace --all-targets --locked -- -D warnings"
