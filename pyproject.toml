@@ -54,11 +54,9 @@ convention = "pep257"
 
 [tool.ruff.lint.per-file-ignores]
 # Test names document their behavior. pytest rewrites assertions.
-"tests/test_*.py" = ["D100", "D103", "INP001", "PLR2004", "S101"]
+"tests/test_*.py" = ["D100", "D103", "PLR2004", "S101"]
 # Keep pytest's private collection and ID conventions in the compatibility module.
 "crates/pytest-allpair-python/python/pytest_allpair/_pytest_compat.py" = ["SLF001"]
-# This is a standalone script.
-"tools/wheel_smoke.py" = ["INP001"]
 
 [tool.ty.environment]
 python-version = "3.11"

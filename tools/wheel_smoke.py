@@ -10,10 +10,18 @@ from venv import EnvBuilder
 
 _SMOKE = """
 from itertools import combinations, product
+from pathlib import Path
 
 import pytest
+import pytest_allpair
 
 cases = []
+
+
+def test_installed_package_has_initializer() -> None:
+    package_file = pytest_allpair.__file__
+    assert package_file is not None
+    assert Path(package_file).name == "__init__.py"
 
 
 @pytest.fixture(scope="session", autouse=True)
