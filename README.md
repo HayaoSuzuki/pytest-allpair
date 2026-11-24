@@ -4,18 +4,13 @@ pytest-allpair generates test cases during pytest collection to cover every feas
 
 ## Installation
 
-Use a standard (GIL-enabled) build of CPython 3.11 through 3.15. Install a released version from PyPI in the environment where you run pytest.
+Use a standard (GIL-enabled) build of CPython 3.11 through 3.15. Add a released version from PyPI as a development dependency in your project.
 
 ```sh
-python -m pip install pytest-allpair
+uv add --dev pytest-allpair
 ```
 
-Release builds target Linux x86-64 (manylinux 2.28), macOS Arm64, and Windows x86-64. To install from source, install the Rust toolchain and run these commands from the root of the checkout.
-
-```sh
-uv venv
-uv pip install .
-```
+Release builds target Linux x86-64 (manylinux 2.28), macOS Arm64, and Windows x86-64.
 
 ## Usage
 
