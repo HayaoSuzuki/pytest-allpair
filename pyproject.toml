@@ -31,9 +31,47 @@ include = [
 
 [dependency-groups]
 test = ["hypothesis>=6.170.1,<7", "pytest-randomly>=5,<6"]
-dev = [{ include-group = "test" }, "mkdocs>=1.6,<2", "ruff>=0.17,<0.18"]
+dev = [
+    { include-group = "test" },
+    "mkdocs>=1.6,<2",
+    "ruff>=0.17,<0.18",
+    "ty>=0.0.80",
+]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-extend-exclude = ["*.md"]
+force-exclude = true
+extend-exclude = ["*.md", ".worktrees", "target"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+# The formatter owns comma placement and adjacent strings. LICENSE covers the repository.
+ignore = ["COM812", "CPY001", "ISC001"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.per-file-ignores]
+# Test names document their behavior. pytest rewrites assertions.
+"tests/test_*.py" = ["D100", "D103", "INP001", "PLR2004", "S101"]
+# Keep pytest's private collection and ID conventions in the compatibility module.
+"crates/pytest-allpair-python/python/pytest_allpair/_pytest_compat.py" = ["SLF001"]
+# This is a standalone script.
+"tools/wheel_smoke.py" = ["INP001"]
+
+[tool.ty.environment]
+python-version = "3.11"
+python-platform = "all"
+root = ["crates/pytest-allpair-python/python"]
+
+[tool.ty.rules]
+all = "error"
+
+[tool.ty.analysis]
+respect-type-ignore-comments = false
+strict-equality-semantics = true
+strict-generic-narrowing = true
+
+[tool.ty.terminal]
+error-on-warning = true

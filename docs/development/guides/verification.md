@@ -1,5 +1,18 @@
 # 網羅の検証
 
+## Python の静的検査
+
+CI は Python 3.11 の構文と型を基準に、パッケージ、テスト、検証ツールを検査する。
+
+```sh
+uv sync --locked
+uv run --locked --no-sync ruff check .
+uv run --locked --no-sync ruff format --check .
+uv run --locked --no-sync ty check
+```
+
+## 網羅の照合
+
 Rust の生成器は各因子の候補数、次数、除外規則を受け取り、選んだ候補の番号を返す。小さなモデルでは、完全ケースを総当たりして有効な行を求め、そこに含まれる n 因子の組を生成結果と比較できる。`formal/coverage_oracle.rs` は、生成器の探索や枝刈りを共有せずに期待結果を計算する。
 
 ## プロパティテストとランダムなテスト順

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+from typing import Literal
 
 import pytest
 
@@ -6,8 +9,10 @@ pytest_plugins = ("pytester",)
 
 
 @pytest.mark.parametrize("order", [None, 1, 3, "max"])
-def test_generated_cases_match_every_feasible_interaction(pytester, order):
-    options = {"exclude": [{"a": 0, "b": 0}]}
+def test_generated_cases_match_every_feasible_interaction(
+    pytester: pytest.Pytester, order: Literal["max"] | int | None
+) -> None:
+    options: dict[str, object] = {"exclude": [{"a": 0, "b": 0}]}
     if order is not None:
         options["order"] = order
     strength = 2 if order is None else (4 if order == "max" else order)
@@ -45,12 +50,14 @@ def test_generated_cases_match_every_feasible_interaction(pytester, order):
     assert result.parseoutcomes()["passed"] > 0
 
 
-def test_grouped_values_and_ids(pytester):
+def test_grouped_values_and_ids(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(
         """
         import pytest
 
-        @pytest.mark.pairwise_parametrize("name", ["default", "other"], ids=[pytest.HIDDEN_PARAM, "label"])
+        @pytest.mark.pairwise_parametrize(
+            "name", ["default", "other"], ids=[pytest.HIDDEN_PARAM, "label"]
+        )
         @pytest.mark.pairwise_parametrize("value, expected", [
             (1, 2),
             pytest.param(2, 9, id="known", marks=pytest.mark.xfail(strict=True)),
@@ -70,7 +77,7 @@ def test_grouped_values_and_ids(pytester):
     pytester.runpytest_subprocess("-q").assert_outcomes(passed=2, xfailed=2)
 
 
-def test_joined_ids_are_unique(pytester):
+def test_joined_ids_are_unique(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(
         """
         import pytest
@@ -87,7 +94,7 @@ def test_joined_ids_are_unique(pytester):
     assert len(names) == len(set(names)) == 4
 
 
-def test_exclusions_match_every_equal_level(pytester):
+def test_exclusions_match_every_equal_level(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(
         """
         import pytest
@@ -117,7 +124,9 @@ def test_exclusions_match_every_equal_level(pytester):
 
 
 @pytest.mark.parametrize("setting", ["skip", "fail_at_collect"])
-def test_empty_factor_follows_pytest_ini(pytester, setting):
+def test_empty_factor_follows_pytest_ini(
+    pytester: pytest.Pytester, setting: Literal["skip", "fail_at_collect"]
+) -> None:
     pytester.makeini(f"[pytest]\nempty_parameter_set_mark = {setting}\n")
     pytester.makepyfile(
         """
@@ -137,9 +146,12 @@ def test_empty_factor_follows_pytest_ini(pytester, setting):
         assert "empty parameter set" in result.stdout.str().lower()
 
 
-def test_fixtures_and_standard_parametrize(pytester):
+@pytest.mark.parametrize("indirect", [True, ["db"]])
+def test_fixtures_and_standard_parametrize(
+    pytester: pytest.Pytester, *, indirect: bool | list[str]
+) -> None:
     pytester.makepyfile(
-        """
+        f"""
         import pytest
 
         @pytest.fixture(params=["plain", "tls"])
@@ -151,7 +163,7 @@ def test_fixtures_and_standard_parametrize(pytester):
             return "db-" + request.param
 
         @pytest.mark.parametrize("user", ["admin", "staff"])
-        @pytest.mark.pairwise_parametrize("db", ["pg", "sqlite"], indirect=True)
+        @pytest.mark.pairwise_parametrize("db", ["pg", "sqlite"], indirect={indirect!r})
         @pytest.mark.pairwise_parametrize("cache", [True, False])
         def test_matrix(transport, user, db, cache):
             assert db in ("db-pg", "db-sqlite")
@@ -160,7 +172,7 @@ def test_fixtures_and_standard_parametrize(pytester):
     pytester.runpytest_subprocess("-q").assert_outcomes(passed=16)
 
 
-def test_duplicate_indirect_fixture_parameter(pytester):
+def test_duplicate_indirect_fixture_parameter(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(
         """
         import pytest
@@ -179,7 +191,7 @@ def test_duplicate_indirect_fixture_parameter(pytester):
     assert "duplicate" in result.stdout.str().lower()
 
 
-def test_class_and_module_factors(pytester):
+def test_class_and_module_factors(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(
         """
         import pytest
@@ -213,8 +225,9 @@ def test_class_and_module_factors(pytester):
         ('@pytest.mark.pairwise(exclude=[{"a": 0}, {"a": 1}])', "no valid cases"),
     ],
 )
-def test_invalid_declarations(pytester, declaration, message):
+def test_invalid_declarations(pytester: pytest.Pytester, declaration: str, message: str) -> None:
     axis = "" if "scope=" in declaration else '@pytest.mark.pairwise_parametrize("a", [0, 1])'
+    scope = ', scope="module"' if 'scope="session"' in declaration else ""
     pytester.makepyfile(
         f"""
         import pytest
@@ -225,7 +238,7 @@ def test_invalid_declarations(pytester, declaration, message):
 
         {declaration.replace(chr(10), chr(10) + "        ")}
         {axis}
-        @pytest.mark.pairwise_parametrize("b", [0, 1]{', scope="module"' if 'scope="session"' in declaration else ""})
+        @pytest.mark.pairwise_parametrize("b", [0, 1]{scope})
         def test_matrix(a, b):
             pass
         """
@@ -236,7 +249,7 @@ def test_invalid_declarations(pytester, declaration, message):
     assert message in result.stdout.str().lower()
 
 
-def test_configuration_only_allowed_on_function(pytester):
+def test_configuration_only_allowed_on_function(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(
         """
         import pytest
@@ -253,7 +266,9 @@ def test_configuration_only_allowed_on_function(pytester):
 
 
 @pytest.mark.parametrize("escaping_disabled", [False, True])
-def test_node_ids_use_pytest_escaping_once(pytester, escaping_disabled):
+def test_node_ids_use_pytest_escaping_once(
+    pytester: pytest.Pytester, *, escaping_disabled: bool
+) -> None:
     pytester.makeini(
         f"[pytest]\ndisable_test_id_escaping_and_forfeit_all_rights_to_community_support = "
         f"{escaping_disabled}\n"
@@ -289,10 +304,12 @@ def test_node_ids_use_pytest_escaping_once(pytester, escaping_disabled):
     )
     result = pytester.runpytest_subprocess("--collect-only", "-q")
     assert result.ret == pytest.ExitCode.OK
-    ids = json.loads((pytester.path / "nodeids.json").read_text(encoding="utf-8"))
-    assert len(ids) == 6
+    nodeids: object = json.loads((pytester.path / "nodeids.json").read_text(encoding="utf-8"))
+    assert isinstance(nodeids, list)
+    ids = [nodeid for nodeid in nodeids if isinstance(nodeid, str)]
+    assert len(ids) == len(nodeids) == 6
 
-    def parameter_ids(test_name):
+    def parameter_ids(test_name: str) -> list[str]:
         return sorted(
             nodeid.removeprefix(test_name) for nodeid in ids if nodeid.startswith(test_name)
         )
@@ -301,7 +318,9 @@ def test_node_ids_use_pytest_escaping_once(pytester, escaping_disabled):
 
 
 @pytest.mark.parametrize("dependency_values", [[10, 20], []])
-def test_direct_values_prune_only_unused_fixture_dependencies(pytester, dependency_values):
+def test_direct_values_prune_only_unused_fixture_dependencies(
+    pytester: pytest.Pytester, dependency_values: list[int]
+) -> None:
     pytester.makepyfile(
         f"""
         import pytest
@@ -330,7 +349,9 @@ def test_direct_values_prune_only_unused_fixture_dependencies(pytester, dependen
     )
 
 
-def test_direct_values_reject_a_parametrized_fixture_with_the_same_name(pytester):
+def test_direct_values_reject_a_parametrized_fixture_with_the_same_name(
+    pytester: pytest.Pytester,
+) -> None:
     pytester.makepyfile(
         """
         import pytest

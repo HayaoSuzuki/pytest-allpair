@@ -6,9 +6,13 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+_GroupedRow = tuple[list[int], int]
+_Exclusion = tuple[list[int], int, int]
+_Model = tuple[list[_GroupedRow], list[_Exclusion]]
+
 
 @st.composite
-def grouped_factors(draw):
+def _grouped_factors(draw: st.DrawFn) -> _Model:
     rows = draw(
         st.lists(
             st.tuples(st.lists(st.integers(0, 1), max_size=2), st.integers(0, 2)),
@@ -16,7 +20,8 @@ def grouped_factors(draw):
             max_size=5,
         )
     )
-    values, expected = zip(*rows, strict=True)
+    values = [value for value, _ in rows]
+    expected = [number for _, number in rows]
     exclusions = draw(
         st.lists(
             st.tuples(st.sampled_from(values), st.sampled_from(expected), st.integers(0, 1)),
@@ -26,9 +31,11 @@ def grouped_factors(draw):
     return rows, exclusions
 
 
-@given(model=grouped_factors())
+@given(model=_grouped_factors())
 @settings(max_examples=24, deadline=None)
-def test_grouped_exclusion_matches_explicit_pytest_cases(tmp_path_factory, model):
+def test_grouped_exclusion_matches_explicit_pytest_cases(
+    tmp_path_factory: pytest.TempPathFactory, model: _Model
+) -> None:
     rows, exclusions = model
     restrictions = [
         {"value": value, "expected": expected, "backend": backend}

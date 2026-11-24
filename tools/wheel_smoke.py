@@ -35,13 +35,15 @@ def test_installed_plugin(a, b, c):
 
 
 def main(distribution: Path) -> None:
+    """Install the distribution in a fresh environment and run the smoke test."""
     distribution = distribution.resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="pytest-allpair-wheel-") as directory:
         project = Path(directory)
         environment = project / "venv"
         EnvBuilder(with_pip=True, symlinks=os.name != "nt").create(environment)
         python = environment / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
-        subprocess.run(
+        # Install the supplied artifact with pip from the isolated environment.
+        subprocess.run(  # noqa: S603
             [
                 str(python),
                 "-I",
@@ -58,7 +60,7 @@ def main(distribution: Path) -> None:
         env = os.environ.copy()
         env.pop("PYTEST_ADDOPTS", None)
         env.pop("PYTEST_PLUGINS", None)
-        subprocess.run(
+        subprocess.run(  # noqa: S603
             [str(python), "-I", "-m", "pytest", "--strict-markers", "-q", "test_wheel.py"],
             cwd=project,
             env=env,
@@ -67,6 +69,9 @@ def main(distribution: Path) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: python tools/wheel_smoke.py DISTRIBUTION_PATH")
-    main(Path(sys.argv[1]))
+    match sys.argv:
+        case [_, distribution_path]:
+            main(Path(distribution_path))
+        case _:
+            message = "usage: python tools/wheel_smoke.py DISTRIBUTION_PATH"
+            raise SystemExit(message)
