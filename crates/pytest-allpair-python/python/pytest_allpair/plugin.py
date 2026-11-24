@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pytest
 
 from . import _native
-from ._pytest_compat import Level, parameter_rows
+from ._pytest_compat import Level, parameter_rows, register_rows
 
 _DEFAULT_ORDER = object()
 
@@ -96,16 +96,6 @@ def _exclusions(factors: Sequence[Factor], exclude: object) -> list[list[tuple[i
     return rules
 
 
-def _parameter_set(factors: Sequence[Factor], row: Sequence[int]):
-    levels = [factor.levels[index] for factor, index in zip(factors, row, strict=True)]
-    visible_ids = [level.id for level in levels if level.id is not None]
-    return pytest.param(
-        *(value for level in levels for value in level.values),
-        marks=tuple(mark for level in levels for mark in level.marks),
-        id="-".join(visible_ids) if visible_ids else pytest.HIDDEN_PARAM,
-    )
-
-
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
@@ -118,6 +108,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     definition = metafunc.definition
     marks = list(definition.iter_markers("pairwise_parametrize"))
@@ -155,9 +146,13 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     except (TypeError, ValueError) as error:
         pytest.fail(f"{definition.nodeid}: {error}", pytrace=False)
 
-    metafunc.parametrize(
+    selected = (
+        [factor.levels[index] for factor, index in zip(factors, row, strict=True)] for row in rows
+    )
+    register_rows(
+        metafunc,
         names,
-        [_parameter_set(factors, row) for row in rows],
+        selected,
         indirect=[name for factor in factors for name in factor.indirect],
         scope=scope,
     )

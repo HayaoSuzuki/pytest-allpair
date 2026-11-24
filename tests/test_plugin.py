@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 pytest_plugins = ("pytester",)
@@ -248,3 +250,94 @@ def test_configuration_only_allowed_on_function(pytester):
     result = pytester.runpytest_subprocess("-q")
     result.assert_outcomes(errors=1)
     assert "test function" in result.stdout.str().lower()
+
+
+@pytest.mark.parametrize("escaping_disabled", [False, True])
+def test_node_ids_use_pytest_escaping_once(pytester, escaping_disabled):
+    pytester.makeini(
+        f"[pytest]\ndisable_test_id_escaping_and_forfeit_all_rights_to_community_support = "
+        f"{escaping_disabled}\n"
+    )
+    pytester.makeconftest(
+        """
+        import json
+        from pathlib import Path
+
+        def pytest_collection_finish(session):
+            nodeids = [item.nodeid.split("[", 1)[1] for item in session.items]
+            Path("nodeids.json").write_text(json.dumps(nodeids), encoding="utf-8")
+        """
+    )
+    pytester.makepyfile(
+        r"""
+        import pytest
+
+        values = [
+            pytest.param("explicit", id="日本\\path"),
+            "literal\\u65e5",
+            "line\nbreak",
+        ]
+
+        @pytest.mark.parametrize("value", values)
+        def test_native(value):
+            pass
+
+        @pytest.mark.pairwise_parametrize("value", values)
+        def test_pairwise(value):
+            pass
+        """
+    )
+    result = pytester.runpytest_subprocess("--collect-only", "-q")
+    assert result.ret == pytest.ExitCode.OK
+    ids = json.loads((pytester.path / "nodeids.json").read_text(encoding="utf-8"))
+    assert len(ids) == 6
+    assert ids[:3] == ids[3:]
+
+
+@pytest.mark.parametrize("dependency_values", [[10, 20], []])
+def test_direct_values_prune_only_unused_fixture_dependencies(pytester, dependency_values):
+    pytester.makepyfile(
+        f"""
+        import pytest
+
+        @pytest.fixture(params={dependency_values!r})
+        def dependency(request):
+            return request.param
+
+        @pytest.fixture
+        def shadow(dependency):
+            raise AssertionError("the direct value replaces this fixture")
+
+        @pytest.mark.pairwise_parametrize("shadow", ["direct"])
+        def test_direct(shadow):
+            assert shadow == "direct"
+
+        @pytest.mark.pairwise_parametrize("shadow", ["direct"])
+        def test_still_requested(shadow, dependency):
+            assert shadow == "direct"
+            assert dependency in (10, 20)
+        """
+    )
+    result = pytester.runpytest_subprocess("-q")
+    result.assert_outcomes(
+        passed=3 if dependency_values else 1, skipped=0 if dependency_values else 1
+    )
+
+
+def test_direct_values_reject_a_parametrized_fixture_with_the_same_name(pytester):
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.fixture(params=["fixture"])
+        def value(request):
+            return request.param
+
+        @pytest.mark.pairwise_parametrize("value", ["direct"])
+        def test_matrix(value):
+            pass
+        """
+    )
+    result = pytester.runpytest_subprocess("-q")
+    result.assert_outcomes(errors=1)
+    assert "duplicate" in result.stdout.str().lower()

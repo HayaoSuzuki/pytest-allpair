@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -46,3 +47,48 @@ def parameter_rows(
         )
         for parameters, fragment in zip(sets, resolved, strict=True)
     )
+
+
+def register_rows(
+    metafunc: pytest.Metafunc,
+    names: Sequence[str],
+    rows: Iterable[Sequence[Level]],
+    *,
+    indirect: Sequence[str],
+    scope: str | None,
+) -> None:
+    """Register generated rows with the factor IDs already resolved by pytest."""
+    parameters = []
+    ids = []
+    for row in rows:
+        parameters.append(
+            pytest.param(
+                *(value for level in row for value in level.values),
+                marks=tuple(mark for level in row for mark in level.marks),
+            )
+        )
+        visible_ids = [level.id for level in row if level.id is not None]
+        # Pytest accepts named objects as IDs and uses their name verbatim.
+        # Raw strings would escape the already-resolved factor IDs a second time.
+        ids.append(
+            SimpleNamespace(__name__="-".join(visible_ids)) if visible_ids else pytest.HIDDEN_PARAM
+        )
+    definition = metafunc.definition
+    fixtureinfo = definition._fixtureinfo
+    direct_names = [name for name in names if name not in indirect]
+    for name in direct_names:
+        # Preserve pytest's duplicate error before a direct value shadows the fixture.
+        for fixture in reversed(fixtureinfo.name2fixturedefs.get(name, ())):
+            if fixture.params is not None:
+                pytest.fail(
+                    f"In {definition.nodeid}: duplicate parametrization of {name!r}", pytrace=False
+                )
+            if name not in fixture.argnames:
+                break
+
+    metafunc.parametrize(names, parameters, ids=ids, indirect=indirect, scope=scope)
+    if direct_names:
+        # Pytest ordinarily prunes after all generate-tests hooks. It needs the
+        # reduced closure now, before its fixture hook parametrizes dependencies
+        # of the fixtures replaced by the direct values.
+        fixtureinfo.prune_dependency_tree()
