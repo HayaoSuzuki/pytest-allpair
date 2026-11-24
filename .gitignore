@@ -35,3 +35,5 @@ __pycache__/
 
 # Local formal verification output
 /_apalache-out/
+
+.hypothesis/

@@ -31,6 +31,26 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  rust-shuffle:
+    name: Rust randomized order
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: rustup toolchain install nightly-2026-11-23 --profile minimal
+      - run: cargo +nightly-2026-11-23 test --workspace --locked -- -Z unstable-options --shuffle
+
+  fuzz:
+    name: Fuzz (bounded)
+    uses: ./.github/workflows/fuzz.yml
+    with:
+      bounded: true
+
   pytest:
     name: Python ${{ matrix.python }} / pytest ${{ matrix.pytest }}
     runs-on: ubuntu-latest
@@ -59,8 +79,8 @@ jobs:
             pytest_requirement='pytest>=9,<10'
           fi
           uv venv --python "$PYTHON_VERSION"
-          uv pip install --python .venv/bin/python --editable . "$pytest_requirement"
-          .venv/bin/python -m pytest -q
+          uv pip install --python .venv/bin/python --group test --editable . "$pytest_requirement"
+          .venv/bin/python -m pytest --hypothesis-show-statistics
 
   quality:
     name: Python and documentation
@@ -82,18 +102,20 @@ jobs:
 
   result:
     name: CI result
-    needs: [rust, pytest, quality, wheels]
+    needs: [rust, rust-shuffle, fuzz, pytest, quality, wheels]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       RUST_RESULT: ${{ needs.rust.result }}
+      RUST_SHUFFLE_RESULT: ${{ needs.rust-shuffle.result }}
+      FUZZ_RESULT: ${{ needs.fuzz.result }}
       PYTEST_RESULT: ${{ needs.pytest.result }}
       QUALITY_RESULT: ${{ needs.quality.result }}
       WHEELS_RESULT: ${{ needs.wheels.result }}
     steps:
       - name: Report required job outcomes
         run: |
-          for outcome in "$RUST_RESULT" "$PYTEST_RESULT" "$QUALITY_RESULT" "$WHEELS_RESULT"; do
+          for outcome in "$RUST_RESULT" "$RUST_SHUFFLE_RESULT" "$FUZZ_RESULT" "$PYTEST_RESULT" "$QUALITY_RESULT" "$WHEELS_RESULT"; do
             test "$outcome" = success
           done

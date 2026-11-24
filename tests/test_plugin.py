@@ -264,7 +264,7 @@ def test_node_ids_use_pytest_escaping_once(pytester, escaping_disabled):
         from pathlib import Path
 
         def pytest_collection_finish(session):
-            nodeids = [item.nodeid.split("[", 1)[1] for item in session.items]
+            nodeids = [item.nodeid.split("::", 1)[1] for item in session.items]
             Path("nodeids.json").write_text(json.dumps(nodeids), encoding="utf-8")
         """
     )
@@ -291,7 +291,13 @@ def test_node_ids_use_pytest_escaping_once(pytester, escaping_disabled):
     assert result.ret == pytest.ExitCode.OK
     ids = json.loads((pytester.path / "nodeids.json").read_text(encoding="utf-8"))
     assert len(ids) == 6
-    assert ids[:3] == ids[3:]
+
+    def parameter_ids(test_name):
+        return sorted(
+            nodeid.removeprefix(test_name) for nodeid in ids if nodeid.startswith(test_name)
+        )
+
+    assert parameter_ids("test_native[") == parameter_ids("test_pairwise[")
 
 
 @pytest.mark.parametrize("dependency_values", [[10, 20], []])
