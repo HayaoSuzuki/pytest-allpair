@@ -1,0 +1,27 @@
+default_stages = ["pre-commit"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "cargo-fmt"
+name = "cargo fmt (workspace)"
+language = "system"
+entry = "cargo fmt --all --check"
+files = '(\.rs$|(^|/)Cargo\.(toml|lock)$|^rust-toolchain\.toml$)'
+exclude = '^fuzz/'
+pass_filenames = false
+
+[[repos.hooks]]
+id = "ruff"
+name = "ruff check and format"
+language = "system"
+entry = "uv run --locked ruff check"
+types = ["python"]
+
+[[repos.hooks]]
+id = "ruff-format"
+name = "ruff format check"
+language = "system"
+entry = "uv run --locked ruff format --check"
+types = ["python"]

@@ -1,0 +1,20 @@
+[package]
+name = "pytest-allpair-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = "1"
+libfuzzer-sys = "0.4"
+pytest-allpair-core = { path = "../crates/pytest-allpair-core" }
+
+[[bin]]
+name = "coverage"
+path = "fuzz_targets/coverage.rs"
+test = false
+doc = false
+bench = false

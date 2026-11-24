@@ -1,0 +1,11 @@
+site_name: pytest-allpair
+site_url: https://hayaosuzuki.github.io/pytest-allpair/
+repo_url: https://github.com/HayaoSuzuki/pytest-allpair
+nav:
+  - Home: index.md
+  - User guide:
+      - Quick start: user/guides/quickstart.md
+      - Marker reference: user/reference/markers.md
+  - Development:
+      - Design: development/architecture/pairwise-plugin.md
+      - Verification: development/guides/verification.md
