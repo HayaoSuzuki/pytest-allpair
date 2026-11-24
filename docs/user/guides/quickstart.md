@@ -1,6 +1,6 @@
-# クイックスタート
+# Quick start
 
-通常ビルドの CPython 3.11〜3.15 と pytest 8.4 系または 9 系を使います。リポジトリをチェックアウト済みなら、ルートで次を実行します。その場でソースをビルドする場合は Rust ツールチェーンも必要です。
+Use a standard (GIL-enabled) build of CPython 3.11 through 3.15 and pytest 8.4.x or 9.x. You need the Rust toolchain to build from source. Run these commands from the root of the checkout.
 
 ```sh
 uv venv
@@ -8,7 +8,7 @@ uv pip install .
 uv run --no-sync pytest
 ```
 
-二値の3因子を宣言すると、既定では異なるどの2因子を選んでも、4通りの値のペアを少なくとも一度実行するケースが収集されます。
+Declare three factors with two values each. By default, the collected cases exercise all four pairs of values for any two factors you choose.
 
 ```python
 import pytest
@@ -20,7 +20,7 @@ import pytest
 def test_storage(backend, cache, mode): ...
 ```
 
-`pytest --collect-only -q` で生成したケースを確認できます。3因子ごとの組を網羅するには `order=3` を指定します。無効な組は引数名と値で指定します。
+Run `pytest --collect-only -q` to inspect the generated cases. Set `order=3` to cover combinations of three factors. Specify invalid combinations by argument name and value.
 
 ```python
 @pytest.mark.pairwise(order=3, exclude=[{"backend": "sqlite", "replicas": 3}])
@@ -32,4 +32,4 @@ def test_storage(backend, cache, mode): ...
 def test_distributed_storage(backend, replicas, cache, mode, user): ...
 ```
 
-`user` は標準マークで指定したため、生成された各ケースを `staff` と `guest` の両方で実行します。マークの詳細は[リファレンス](../reference/markers.md)に記載しています。
+Because `user` uses the standard `parametrize` marker, pytest runs each generated case with both `staff` and `guest`. See the [marker reference](../reference/markers.md) for the full options.

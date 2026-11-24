@@ -2,53 +2,65 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** pytest の収集時に、宣言した因子から制約付きの n 因子網羅ケースを生成する MIT ライセンスのプラグインを作る。
+**Goal**
 
-**Architecture:** Python が pytest マークを候補行番号と除外条件へ変換し、Rust が有効な網羅ケースを選ぶ。Python が各行の値、マーク、ID を復元し、`Metafunc.parametrize` にまとめて登録する。
+Build an MIT-licensed pytest plugin that generates constraint-aware n-way covering cases from declared factors at collection time.
 
-**Tech Stack:** Rust 2024、PyO3 0.30.1 の `abi3-py311`、maturin、uv、pytest、cargo-fuzz。Quint と TLC は独立した枝刈り検証の試行に使う。
+**Architecture**
 
-**Spec:** [pytest-allpair の設計](../../architecture/pairwise-plugin.md)
+Python translates pytest markers into candidate row indices and exclusion rules. Rust chooses valid rows that meet the coverage requirements. Python restores the values, marks, and IDs for each row and registers them in a single call to `Metafunc.parametrize`.
+
+**Tech stack**
+
+Rust 2024, PyO3 0.30.1 with `abi3-py311`, maturin, uv, pytest, and cargo-fuzz. Use Quint and TLC for an independent pruning experiment.
+
+**Spec**
+
+[pytest-allpair design](../../architecture/pairwise-plugin.md)
 
 ## Global Constraints
 
-- 通常ビルドの CPython 3.11〜3.15 と pytest 8.4 系・9 系を対象とする。
-- Linux、macOS、Windows では wheel をインストールし、自動読み込みとテストの実行まで確認する。
-- 初版の生成オプションは `order` と `exclude` とする。ライセンスは MIT とする。
-- 同じバージョンで、因子と候補の順序、次数、除外条件が同じなら、生成結果の行と順序は同じになる。
-- 完全ケースの直積を中間表として全件保持する処理を避ける。参照照合器の入力は小さなモデルに限定する。
-- 各タスクを独立したテストとコミットで完了させる。発行用アカウントへの公開は別の作業とする。
-- GitHub の既定ブランチは `main`。削除と force push を禁止する。現行の `HayaoSuzuki/hoimin` と同じく、CI の結果は GitHub 上に報告し、必須マージ条件の設定は空とする。
-- 将来のリリース予約ブランチは `pytest-allpair-release-state` を使う。このブランチの削除と force push、および `v*` タグの変更と削除は、適用済みのルールセットで禁止する。
+- Support standard (GIL-enabled) builds of CPython 3.11 through 3.15 and pytest 8.4.x and 9.x.
+- On Linux, macOS, and Windows, install the wheel and verify plugin discovery and test execution.
+- Expose `order` and `exclude` as the initial generator options. Use the MIT license.
+- Within one version, the same factor order, candidate order, coverage order, and exclusions must produce the same rows in the same order.
+- Avoid holding the full Cartesian product of complete cases as an intermediate table. Limit the reference oracle to small models.
+- Complete each task with its own tests and commit. Publishing through the release account is a separate task.
+- Use `main` as the default GitHub branch and block deletion and force pushes. Report CI results on GitHub and leave required merge checks empty, matching `HayaoSuzuki/hoimin`.
+- Reserve `pytest-allpair-release-state` for release state. The rulesets block deletion and force pushes on that branch and block updates and deletion of existing `v*` tags.
 
 ## Review Focus
 
-- 複数の除外条件によって初めて不可能になる n 因子の組を網羅要求から外し、完成可能な組はすべて覆う（Task 1）。
-- `ids` の連結結果が同じ文字列になっても、生成行の node ID を一意にする（Task 3）。
-- 等値だが異なる候補行を区別し、同じ値を指定した除外は一致する全行に適用する（Task 3）。
-- `indirect=True` と `fixture(params=...)` が同じ引数に値を与えたら、収集エラーにする（Task 3）。
-- ソースツリー外の新規環境で wheel をインストールすると、標準のプラグイン自動読み込みでテストを実行できる（Task 2、5）。
+- Cover every n-way interaction that can extend to a valid complete case. Exclude an interaction from the coverage requirements when a combination of rules prevents all completions (Task 1).
+- Ensure generated node IDs stay unique when joining distinct factor IDs produces identical strings (Task 3).
+- Keep equal candidate rows distinct and apply exclusions to every candidate row that compares equal to the specified value (Task 3).
+- Report a collection error when `indirect=True` and `fixture(params=...)` supply values for the same argument (Task 3).
+- Install the wheel in a clean environment outside the source tree and run tests with standard plugin discovery (Tasks 2 and 5).
 
 ---
 
-## ファイル構成
+## File layout
 
-| 場所 | 責務 |
+| Location | Responsibility |
 | --- | --- |
-| `Cargo.toml`、`Cargo.lock`、`rust-toolchain.toml`、`.cargo/config.toml` | ワークスペース、固定ツールチェーン、Rust の開発設定 |
-| `crates/pytest-allpair-core/src/lib.rs` | 候補番号の検証、制約付き探索、網羅行の選択 |
-| `crates/pytest-allpair-python/src/lib.rs` | Rust の生成関数を PyO3 で公開し、失敗を Python 例外に変換 |
-| `crates/pytest-allpair-python/python/pytest_allpair/` | `plugin.py` が pytest フックとモデルの組み立て、`_pytest_compat.py` が pytest のバージョン差を担当 |
-| `pyproject.toml`、`uv.lock`、`prek.toml` | maturin と pytest エントリポイント、Python 開発環境と検査設定 |
-| `formal/coverage_oracle.rs`、`fuzz/`、`formal/quint/` | 独立な総当たり照合、ファズテスト、枝刈りのモデル検査 |
-| `tests/`、`tools/`、`infra/`、`.github/workflows/` | pytest 統合テスト、配布物の検証、CI の設定 |
-| `README.md`、`LICENSE`、`docs/user/`、`docs/development/` | インストールと利用方法、ライセンス、開発と検証の手順 |
+| `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `.cargo/config.toml` | Workspace, pinned toolchain, and Rust development settings |
+| `crates/pytest-allpair-core/src/lib.rs` | Validate candidate indices, search under constraints, and select covering rows |
+| `crates/pytest-allpair-python/src/lib.rs` | Expose the Rust generator through PyO3 and translate failures into Python exceptions |
+| `crates/pytest-allpair-python/python/pytest_allpair/` | pytest hooks and model construction in `plugin.py`, with pytest version differences handled by `_pytest_compat.py` |
+| `pyproject.toml`, `uv.lock`, `prek.toml` | maturin and the pytest entry point, Python development environment, and static checks |
+| `formal/coverage_oracle.rs`, `fuzz/`, `formal/quint/` | Independent exhaustive oracle, fuzz tests, and pruning model checks |
+| `tests/`, `tools/`, `infra/`, `.github/workflows/` | pytest integration tests, distribution verification, and CI configuration |
+| `README.md`, `LICENSE`, `docs/user/`, `docs/development/` | Installation and usage, license, development, and verification |
 
-### Task 1: 制約付き網羅と総当たり照合
+### Task 1. Constraint-aware coverage and exhaustive oracle
 
-**Files:** Create `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `.cargo/config.toml`, `crates/pytest-allpair-core/{Cargo.toml,src/lib.rs,tests/coverage.rs}`, `formal/coverage_oracle.rs`.
+**Files**
 
-**Interfaces:** 次の公開関数と型を生成器の契約とする。禁止規則の各項は因子番号と候補番号の集合であり、規則の全項に一致する完全ケースを除外する。`formal/coverage_oracle.rs` の `check(level_counts: &[usize], order: usize, forbidden: &[ForbiddenRule], result: &Result<Vec<Vec<usize>>, GenerateError>) -> (usize, usize)` は、不適合時に失敗し、有効な行数と必要な組の数を返す。
+Create `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `.cargo/config.toml`, `crates/pytest-allpair-core/{Cargo.toml,src/lib.rs,tests/coverage.rs}`, and `formal/coverage_oracle.rs`.
+
+**Interfaces**
+
+The public function and types below define the generator contract. Each term in a forbidden rule pairs a factor index with a set of candidate indices. A rule excludes a complete case that matches every term. The function `check(level_counts: &[usize], order: usize, forbidden: &[ForbiddenRule], result: &Result<Vec<Vec<usize>>, GenerateError>) -> (usize, usize)` in `formal/coverage_oracle.rs` fails on a mismatch and returns the counts of valid rows and required interactions.
 
 ```rust
 pub struct ForbiddenRule {
@@ -65,59 +77,75 @@ pub fn generate(
 ) -> Result<Vec<Vec<usize>>, GenerateError>;
 ```
 
-- [ ] ワークスペースとテストを作る。ルートの Cargo resolver は `3`、Rust は hoimin と同じ `1.100.0` とし、別ワークスペースの `fuzz/` を除外する。照合器は小さな直積を列挙して行の合法性と網羅集合の一致を判定する。`coverage.rs` は `#[path]` で照合器を読む。
-- [ ] 回帰テスト `covers_feasible_pairs` を先に書く。`[2, 2, 2]`、次数 2、禁止規則 `[(0,[0]), (1,[0])]` で、照合器の有効行数が 6、必要な組が 11 であり、生成行がすべて有効であることを検証する。
-- [ ] `multiple_rules_block_one_projection` では、同じモデルで `(A,B,C)=(0,0,0),(0,0,1)` を別規則として除外し、必要な組が 11 になることを照合する。`supports_order_one_three_and_full` では `[2,3,2,2]` に対して次数 1、3、4 を照合する。`rejects_invalid_or_unsatisfiable_models` では次数 0 と因子数超過を `InvalidModel`、全水準を除外する制約を `NoValidCases` と区別する。
-- [ ] `cargo test -p pytest-allpair-core --test coverage` を実行し、生成器が未実装のため失敗することを確認する。
-- [ ] `generate` を実装する。次数分の因子と水準の組を順に列挙し、未網羅の組を種に深さ優先探索で有効行を探す。候補の順序は新たに網羅できる組の数と因子・水準の位置で決める。禁止規則の全項が確定して一致した時点でその枝を捨て、候補が尽きるまで探索しても有効行がなければ、その組を網羅対象から外す。見つけた完全ケースで覆う組を記録し、次の未網羅の組に進む。次数が因子数と等しい場合は合法な行を順に列挙する。
-- [ ] `deterministic_on_large_cartesian_space` を追加する。二値20因子、次数2で結果を2回比較し、全760ペアを覆うことと、行が760件以下であることを検証する。このテストでは期待集合を二因子の値から作る。
-- [ ] `cargo fmt --all --check`、`cargo test --locked -p pytest-allpair-core`、`cargo clippy --locked -p pytest-allpair-core --all-targets -- -D warnings` が成功したら、生成器と照合器をコミットする。
+- [ ] Create the workspace and tests. Use Cargo resolver `3`, pin Rust to `1.100.0` as in hoimin, and keep `fuzz/` in a separate workspace. The oracle enumerates small Cartesian products to check row validity and coverage. Load the oracle from `coverage.rs` with `#[path]`.
+- [ ] Write the regression test `covers_feasible_pairs` first. With counts `[2, 2, 2]`, order 2, and forbidden rule `[(0,[0]), (1,[0])]`, verify that the oracle finds 6 valid rows and 11 required interactions, and that every generated row is valid.
+- [ ] In `multiple_rules_block_one_projection`, use separate rules to forbid `(A,B,C)=(0,0,0),(0,0,1)` in the same model and verify that 11 pairs remain required. In `supports_order_one_three_and_full`, check orders 1, 3, and 4 against the oracle for `[2,3,2,2]`. In `rejects_invalid_or_unsatisfiable_models`, expect `InvalidModel` for order 0 or an order above the factor count and `NoValidCases` when a constraint excludes all levels.
+- [ ] Run `cargo test -p pytest-allpair-core --test coverage` and confirm that it fails because the generator is missing.
+- [ ] Implement `generate`. Enumerate interactions of the requested order and use each uncovered interaction as the starting point for a depth-first search for a valid row. Order candidates by the number of interactions they can add to coverage and by factor and level position. Prune a branch once every term of a forbidden rule is assigned and matches. If the search exhausts the candidates without a valid row, remove the interaction from the coverage requirements. Record the interactions covered by each completed row and proceed to the next uncovered interaction. When the order equals the factor count, enumerate the valid complete rows in order.
+- [ ] Add `deterministic_on_large_cartesian_space`. Run the generator twice at order 2 with 20 binary factors. Compare the results, confirm coverage of all 760 pairs, and check that the generator returns at most 760 rows. Build the expected set from pairs of factors and their values.
+- [ ] Run `cargo fmt --all --check`, `cargo test --locked -p pytest-allpair-core`, and `cargo clippy --locked -p pytest-allpair-core --all-targets -- -D warnings`. Commit the generator and oracle when the checks pass.
 
-### Task 2: インストールできる Python パッケージと Rust 接続
+### Task 2. Installable Python package and Rust bridge
 
-**Files:** Modify `Cargo.toml`, `Cargo.lock`, `.gitignore`. Create `pyproject.toml`, `uv.lock`, `LICENSE`, `crates/pytest-allpair-python/{Cargo.toml,src/lib.rs,python/pytest_allpair/__init__.py,python/pytest_allpair/plugin.py}`, `tests/test_native.py`.
+**Files**
 
-**Interfaces:** `pytest_allpair._native.generate(level_counts: list[int], order: int, forbidden: list[list[tuple[int, list[int]]]]) -> list[list[int]]`。Task 1 の `generate` を呼び、Rust の無解と不正モデルは Python の `ValueError` に変換する。
+Modify `Cargo.toml`, `Cargo.lock`, and `.gitignore`. Create `pyproject.toml`, `uv.lock`, `LICENSE`, `crates/pytest-allpair-python/{Cargo.toml,src/lib.rs,python/pytest_allpair/__init__.py,python/pytest_allpair/plugin.py}`, and `tests/test_native.py`.
 
-- [ ] `test_native_solves_two_by_two` を作り、`_native.generate([2, 2], 2, [])` が4行の全組を返すこと、`_native.generate([2], 1, [[(0, [0, 1])]])` が `ValueError` を出すことを検証する。混合パッケージと空の `_native` モジュールで先にビルドを通し、`uv run --locked pytest -q tests/test_native.py` が `generate` 未定義で失敗することを確認する。
-- [ ] Python 側の配布名を `pytest-allpair`、モジュール名を `pytest_allpair._native` とし、PyO3 で Task 1 の入出力型を変換する。maturin の `manifest-path` は Python クレート、`python-source` はその中の `python/` を指す。エントリポイントは `[project.entry-points.pytest11]` の `allpair = "pytest_allpair.plugin"`。Python の範囲を `>=3.11,<3.16`、pytest の範囲を `>=8.4,<10` とする。 [maturin の構成](https://www.maturin.rs/project_layout.html) · [PyO3 の ABI](https://docs.rs/crate/pyo3/0.30.1/source/guide/src/features.md)
-- [ ] MIT の `LICENSE` と配布メタデータを置く。`uv lock` と `uv sync --locked` を実行し、`uv run --locked pytest -q tests/test_native.py` が成功したらコミットする。
+**Interfaces**
 
-### Task 3: pytest のマーク、値、ID、fixture の接続
+`pytest_allpair._native.generate(level_counts: list[int], order: int, forbidden: list[list[tuple[int, list[int]]]]) -> list[list[int]]` calls the generator from Task 1. Invalid and unsatisfiable Rust models become Python `ValueError` exceptions.
 
-**Files:** Modify `crates/pytest-allpair-python/python/pytest_allpair/plugin.py`. Create `crates/pytest-allpair-python/python/pytest_allpair/_pytest_compat.py`, `tests/test_plugin.py`.
+- [ ] Add `test_native_solves_two_by_two`. Check that `_native.generate([2, 2], 2, [])` returns all four rows and that `_native.generate([2], 1, [[(0, [0, 1])]])` raises `ValueError`. Build the mixed package with an empty `_native` module first. Run `uv run --locked pytest -q tests/test_native.py` and confirm that it fails because `generate` is missing.
+- [ ] Use `pytest-allpair` as the distribution name and `pytest_allpair._native` as the extension module name. Use PyO3 to convert the Task 1 input and output types. Set maturin's `manifest-path` to the Python crate's manifest and `python-source` to its `python/` directory. Set `allpair = "pytest_allpair.plugin"` under `[project.entry-points.pytest11]`. Set the Python requirement to `>=3.11,<3.16` and the pytest requirement to `>=8.4,<10`. [maturin project layout](https://www.maturin.rs/project_layout.html) · [PyO3 ABI](https://docs.rs/crate/pyo3/0.30.1/source/guide/src/features.md)
+- [ ] Add the MIT `LICENSE` and distribution metadata. Run `uv lock` and `uv sync --locked`. Commit when `uv run --locked pytest -q tests/test_native.py` passes.
 
-**Interfaces:** `pytest_configure(config: pytest.Config) -> None` と `pytest_generate_tests(metafunc: pytest.Metafunc) -> None`。互換モジュールの `parameter_rows(argnames, argvalues, ids, *, metafunc)` は因子の引数名と、各水準の値のタプル・マーク列・解決済み ID を返す。空の因子では候補行を空のまま返す。数値モデルは Task 2 のネイティブ関数に渡す。
+### Task 3. pytest markers, values, IDs, and fixtures
 
-- [ ] `pytest_plugins = ("pytester",)` を `tests/test_plugin.py` で宣言し、`pytester` で `test_pairwise_cases` を作る。二値3因子に既定の次数を適用し、収集した行から各ペアが4通り出ることを検証する。`test_order_and_exclusions` は二値4因子で `order=3` と `exclude=[{"a": 0, "b": 0}]` を使い、各行の合法性と、許可行の全3因子組との一致を検証する。
-- [ ] `test_grouped_values_and_ids` で `(input, expected)` の対応、`ids` の列と callable、`pytest.param` の明示 ID と `xfail`、`pytest.HIDDEN_PARAM` を確認する。`test_joined_ids_are_unique` は `a-b` と `a`、`c` と `b-c` を因子 ID にして、連結後も node ID が4件とも一意であることを確認する。
-- [ ] `test_exclusions_match_every_equal_level` は等値のリスト2件と別のリスト1件を用意する。除外なしでは両方の等値行の明示 ID を確認し、除外時は両方が除かれることを確認する。`test_empty_factor_follows_pytest_ini` は既定の skip と `empty_parameter_set_mark=fail_at_collect` の両方を試す。
-- [ ] `test_fixtures_and_standard_parametrize` は標準マークと別名の `fixture(params=...)` が直積に加わり、`indirect` で指定した fixture が `request.param` を受け取ることを確認する。`test_duplicate_indirect_fixture_parameter` は `fixture(params=...)` と専用マークに同じ引数を指定し、収集エラーを確認する。`test_class_and_module_factors` は両方の階層で因子を宣言し、関数の設定が全因子に適用されることを確認する。
-- [ ] `test_invalid_declarations` をパラメータ化し、範囲外の次数、設定マークの重複・誤配置、未知の除外キー・値、真偽を判定できない比較、空の除外辞書、`order=True`、異なる明示 `scope`、一部の因子だけに明示した `scope`、制約で有効行が無い場合を、それぞれテスト名と原因を含む収集エラーとして確認する。
-- [ ] `uv run --locked pytest -q tests/test_plugin.py` を実行し、フックが未実装のため対象テストが失敗することを確認する。
-- [ ] フックでマークを登録・検証する。因子と設定マークは `metafunc.definition.iter_markers_with_node` から取得する。引数形状・候補行・因子 ID の処理は互換モジュールに置き、公開 API で扱えない処理には pytest の `ParameterSet` と `IdMaker` を局所的に再利用する。普通の Python オブジェクトへのハッシュ要求を導入せず、除外対象を候補番号へ変換する。
-- [ ] 選んだ行から値、マーク、ID を組み立てる。候補行が空なら引数形状と fixture 指定を保って `Metafunc.parametrize(..., [])` を呼ぶ。それ以外は隠す ID 部分を除いた結合 ID を使う。全因子の ID 部分を隠す行には `pytest.HIDDEN_PARAM` を渡し、最終的な ID の一意化は pytest に任せる。全因子の `indirect` を引数名に展開し、共通の `scope` と共に一度の `Metafunc.parametrize` で登録する。 [pytest 8.4 の ID の処理](https://docs.pytest.org/en/8.4.x/_modules/_pytest/python.html) · [現行の Metafunc API](https://docs.pytest.org/en/stable/reference/reference.html#pytest.Metafunc.parametrize)
-- [ ] pytest 8.4 系と9系の範囲をそれぞれ `pytest>=8.4,<9` と `pytest>=9,<10` で指定し、新規 venv の Python に `uv pip install --python <venvのPython> -e . <pytestの範囲>` で入れる。各 venv で `python -m pytest -q tests/test_plugin.py tests/test_native.py` が成功したらコミットする。
+**Files**
 
-### Task 4: ファズテストと Quint の試行
+Modify `crates/pytest-allpair-python/python/pytest_allpair/plugin.py`. Create `crates/pytest-allpair-python/python/pytest_allpair/_pytest_compat.py` and `tests/test_plugin.py`.
 
-**Files:** Create `fuzz/{Cargo.toml,Cargo.lock,.gitignore,fuzz_targets/coverage.rs}`, `formal/quint/{pruning.qnt,README.md}`, `docs/development/guides/verification.md`. Task 1 の `formal/coverage_oracle.rs` を再利用する。
+**Interfaces**
 
-**Interfaces:** ファズ入力は因子数1〜5、水準数1〜3、次数と禁止規則に変換し、同じ `generate` に渡す。Quint モデルは参考として同じ形の禁止規則と部分割当てを使う。
+Implement `pytest_configure(config: pytest.Config) -> None` and `pytest_generate_tests(metafunc: pytest.Metafunc) -> None`. The compatibility module's `parameter_rows(argnames, argvalues, ids, *, metafunc)` returns the argument names for a factor and each level's tuple of values, marks, and resolved ID. Keep the list of candidate rows empty when a factor has no candidates. Pass the numeric model to the native function from Task 2.
 
-- [ ] `fuzz_targets/coverage.rs` を作る。ルートとは別に Cargo ロックを管理し、`formal/coverage_oracle.rs` をテストから読む。`cargo +nightly fuzz run coverage -- -runs=1000` で、生成行の合法性、完全な n 因子網羅、無解の一致を確認する。失敗した入力は通常の Rust テストで再現できる具体値に変換する。
-- [ ] `pruning.qnt` に、二値3因子、禁止条件 `A=0, B=0`、部分割当てを枝刈りする遷移を記述する。`SoundPrune` は、捨てた部分割当てに対応する有効な完全ケースが空であることを総当たりで判定する。
-- [ ] `quint verify formal/quint/pruning.qnt --backend=tlc --main Pruning --invariants SoundPrune` が違反なしで完了し、同じコマンドの `--main PruningMutant` が「禁止規則の一部だけが一致したら捨てる」版の反例を出すことを確認する。たとえば `A=0` は `B=1` で完成できる。 [Quint CLI の検証オプション](https://quint.sh/docs/quint#command-verify)
-- [ ] 反例のモデル入力から Rust の公開関数を呼ぶ回帰テストを組み立て、既存の網羅照合でその誤りを検出できるか記録する。ITF が必要な場合は、同じ不変条件を Apalache の `--out-itf` で検査する。結果、有限モデルの範囲、Rust の照合との役割分担を記録してコミットする。常設の ITF・MBT を追加する判断は試行結果に委ねる。
+- [ ] Declare `pytest_plugins = ("pytester",)` in `tests/test_plugin.py`. Use `pytester` in `test_pairwise_cases` to check that the default order covers all four pairs of values for each pair of factors in a model with three binary factors. In `test_order_and_exclusions`, use four binary factors with `order=3` and `exclude=[{"a": 0, "b": 0}]`. Check that every row is valid and that the covered triples match the triples in all valid rows.
+- [ ] In `test_grouped_values_and_ids`, check that `(input, expected)` values stay paired. Test sequence and callable forms of `ids`, explicit `pytest.param` IDs and `xfail` marks, and `pytest.HIDDEN_PARAM`. In `test_joined_ids_are_unique`, use `a-b` and `a` as IDs for one factor and `c` and `b-c` for the other. Verify that all four node IDs remain distinct after joining the fragments.
+- [ ] In `test_exclusions_match_every_equal_level`, provide two equal lists and a different list. Verify that both equal candidates retain their explicit IDs without an exclusion and that the exclusion removes both. In `test_empty_factor_follows_pytest_ini`, exercise the default skip behavior and `empty_parameter_set_mark=fail_at_collect`.
+- [ ] In `test_fixtures_and_standard_parametrize`, check that the standard marker and a separately named `fixture(params=...)` contribute to the Cartesian product. Check that the fixture declared with `indirect` receives `request.param`. In `test_duplicate_indirect_fixture_parameter`, specify the same argument in `fixture(params=...)` and a factor marker and expect a collection error. In `test_class_and_module_factors`, declare factors at both levels and check that the function's settings apply to all factors.
+- [ ] Parametrize `test_invalid_declarations` to check collection errors for out-of-range orders, duplicate or misplaced configuration markers, unknown exclusion keys or values, equality comparisons with no boolean result, empty exclusion dictionaries, `order=True`, conflicting explicit scopes, scopes set on only some factors, and constraints that rule out all valid cases. Check that each error includes the test name and the cause.
+- [ ] Run `uv run --locked pytest -q tests/test_plugin.py` and confirm that the relevant tests fail because the hooks are missing.
+- [ ] Register and validate the markers in the hooks. Get the factor and configuration markers from `metafunc.definition.iter_markers_with_node`. Handle argument shape, candidate rows, and factor IDs in the compatibility module. Reuse pytest's `ParameterSet` and `IdMaker` there for operations outside the public API. Resolve exclusions to candidate indices without requiring Python values to be hashable.
+- [ ] Assemble values, marks, and IDs from the selected rows. For an empty candidate list, call `Metafunc.parametrize(..., [])` with the original argument shape and fixture settings. For generated cases, join the visible ID fragments. Pass `pytest.HIDDEN_PARAM` for a row whose fragments are all hidden and let pytest resolve any duplicate IDs. Collect the indirect argument names across all factors and register them with the common scope in one `Metafunc.parametrize` call. [ID resolution in pytest 8.4](https://docs.pytest.org/en/8.4.x/_modules/_pytest/python.html) · [Metafunc API](https://docs.pytest.org/en/stable/reference/reference.html#pytest.Metafunc.parametrize)
+- [ ] Use `pytest>=8.4,<9` and `pytest>=9,<10` for the two supported pytest series. Install each in a fresh virtual environment with `uv pip install --python <venv-python> -e . <pytest-requirement>`. Commit when `python -m pytest -q tests/test_plugin.py tests/test_native.py` passes in both environments.
 
-### Task 5: CI、wheel、利用と開発の手順
+### Task 4. Fuzz testing and the Quint experiment
 
-**Files:** Modify `README.md`, `pyproject.toml`. Create `prek.toml`, `mkdocs.yml`, `docs/index.md`, `docs/user/guides/quickstart.md`, `docs/user/reference/markers.md`, `tools/wheel_smoke.py`, `infra/README.md`, `.github/workflows/{ci.yml,non-linux-ci.yml,release.yml}`.
+**Files**
 
-**Interfaces:** `python tools/wheel_smoke.py WHEEL_PATH` は指定の wheel を新規環境に入れ、外部の作業ディレクトリで pytest を呼び、プラグインの自動読み込みと収集・実行を確認する。
+Create `fuzz/{Cargo.toml,Cargo.lock,.gitignore,fuzz_targets/coverage.rs}`, `formal/quint/{pruning.qnt,README.md}`, and `docs/development/guides/verification.md`. Reuse `formal/coverage_oracle.rs` from Task 1.
 
-- [ ] wheel のスモークテストに二値3因子の利用例を置く。成功件数に加え、実行された行のペア集合が全12組であることを確認する。自動読み込みが無効な構成でスモークが失敗することを確かめ、通常構成で成功させる。
-- [ ] `uv run` で Rust の検査と pytest の統合テストを再現できる手順を用意する。CI では CPython 3.11、3.12、3.13、3.14、3.15 と pytest 8.4 系・9 系を組み合わせて確認する。Linux、macOS、Windows で `maturin build --release --locked` から生成した wheel のスモークテストを走らせる。Linux の配布 wheel は manylinux 2.28 のビルド環境で作り、生成物の manylinux タグを確認する。hoimin の対応する検査・配布ワークフローに沿って責務を分け、配布用ビルドは成果物を保存する。
-- [ ] `infra/README.md` に適用済みの GitHub ルールセットと、マージ後のブランチ自動削除、PR ブランチ更新、Discussions の設定を記録する。リリース用ブランチを参照するときは `pytest-allpair-release-state` を使う。 [GitHub のルールセット](https://github.com/HayaoSuzuki/pytest-allpair/rules)
-- [ ] 利用者向け文書に、インストール、基本例、`order=3` と `exclude`、通常の `parametrize` との混在、空の候補と収集エラーを掲載する。開発者向け文書に、網羅照合、ファズテスト、Quint の試行、wheel の確認手順を載せる。
-- [ ] `cargo fmt --all --check`、`cargo clippy --workspace --all-targets --locked -- -D warnings`、`cargo test --workspace --locked`、`uv run --locked pytest -q`、対象環境での wheel スモークテストを実行する。公開する契約と実装の対応、pytest 固有の表現が Rust コアに入っていないこと、直積の中間表がないことをレビューし、検証結果を記録してコミットする。
+**Interfaces**
+
+Convert fuzz input into a model with one to five factors, one to three levels per factor, a coverage order, and forbidden rules. Call the same `generate` function. The Quint model uses the same form of forbidden rule and represents partial assignments.
+
+- [ ] Add `fuzz_targets/coverage.rs`. Keep its Cargo lockfile separate from the root lockfile and load `formal/coverage_oracle.rs` from the target. Run `cargo +nightly fuzz run coverage -- -runs=1000` to check row validity, complete n-way coverage, and agreement about unsatisfiable models. Convert failing inputs into concrete values that reproduce the failure in a regular Rust test.
+- [ ] In `pruning.qnt`, model three binary factors, the prohibition of `A=0, B=0`, and a transition that prunes a partial assignment. Have `SoundPrune` enumerate valid complete cases and verify that no valid case extends a discarded assignment.
+- [ ] Verify that `quint verify formal/quint/pruning.qnt --backend=tlc --main Pruning --invariants SoundPrune` finds no violation. Run the same command with `--main PruningMutant` and check that it finds a counterexample to pruning when only part of the forbidden rule matches. For example, `A=0` can be completed with `B=1`. [Quint CLI verification options](https://quint.sh/docs/quint#command-verify)
+- [ ] Use the model input from the counterexample in a regression test against the public Rust generator. Record whether the existing oracle catches the error. If you need an ITF trace, check the same invariant with Apalache's `--out-itf` option. Record the results, the bounds of the finite model, and how its checks relate to the Rust oracle, then commit. Use the results to decide whether to add ITF traces and model-based testing to routine verification.
+
+### Task 5. CI, wheels, and user and developer guides
+
+**Files**
+
+Modify `README.md` and `pyproject.toml`. Create `prek.toml`, `mkdocs.yml`, `docs/index.md`, `docs/user/guides/quickstart.md`, `docs/user/reference/markers.md`, `tools/wheel_smoke.py`, `infra/README.md`, and `.github/workflows/{ci.yml,non-linux-ci.yml,release.yml}`.
+
+**Interfaces**
+
+`python tools/wheel_smoke.py WHEEL_PATH` installs the wheel in a clean environment and runs pytest from a working directory outside the checkout. It checks plugin discovery, collection, and execution.
+
+- [ ] Put an example with three binary factors in the wheel smoke test. Check both the number of passing cases and that the executed rows cover all 12 pairs. Verify that the smoke test fails with plugin auto-loading disabled and passes with standard settings.
+- [ ] Document how to reproduce the Rust checks and pytest integration tests with `uv run`. In CI, test CPython 3.11, 3.12, 3.13, 3.14, and 3.15 against pytest 8.4.x and 9.x. On Linux, macOS, and Windows, smoke-test wheels built by `maturin build --release --locked`. Build Linux distribution wheels in a manylinux 2.28 environment and check the resulting manylinux tags. Separate verification and distribution jobs as in hoimin, and upload distribution builds as artifacts.
+- [ ] In `infra/README.md`, record the applied GitHub rulesets and the settings for deleting merged branches, updating PR branches, and Discussions. Refer to the release branch as `pytest-allpair-release-state`. [GitHub rulesets](https://github.com/HayaoSuzuki/pytest-allpair/rules)
+- [ ] In the user docs, cover installation, basic usage, `order=3` and `exclude`, standard `parametrize` alongside covering factors, empty candidate lists, and collection errors. In the developer docs, cover the reference oracle, fuzz tests, the Quint experiment, and wheel verification.
+- [ ] Run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, `uv run --locked pytest -q`, and the wheel smoke tests in the target environments. Check that the implementation meets its public contract, that the Rust core takes only the numeric model, and that generation avoids an intermediate Cartesian product. Record the verification results and commit.

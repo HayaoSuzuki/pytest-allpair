@@ -2,10 +2,10 @@ site_name: pytest-allpair
 site_url: https://hayaosuzuki.github.io/pytest-allpair/
 repo_url: https://github.com/HayaoSuzuki/pytest-allpair
 nav:
-  - ホーム: index.md
-  - 利用ガイド:
-      - クイックスタート: user/guides/quickstart.md
-      - マークの仕様: user/reference/markers.md
-  - 開発:
-      - 設計: development/architecture/pairwise-plugin.md
-      - 検証: development/guides/verification.md
+  - Home: index.md
+  - User guide:
+      - Quick start: user/guides/quickstart.md
+      - Marker reference: user/reference/markers.md
+  - Development:
+      - Design: development/architecture/pairwise-plugin.md
+      - Verification: development/guides/verification.md

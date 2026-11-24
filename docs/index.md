@@ -1,3 +1,3 @@
 # pytest-allpair
 
-pytest のパラメータから制約付きの n 因子網羅ケースを生成します。[クイックスタート](user/guides/quickstart.md)で、因子を宣言してテストを実行する手順を確認できます。
+pytest-allpair generates constraint-aware n-way test cases from pytest parameters. The [quick start](user/guides/quickstart.md) shows how to declare factors and run the tests.

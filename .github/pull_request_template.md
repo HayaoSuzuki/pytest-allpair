@@ -1,7 +1,7 @@
-## 変更内容
+## Changes
 
-利用者から見える変化と、その理由を記載してください。
+Describe what changes for users and why.
 
-## 検証
+## Verification
 
-再現手順と確認したテストを記載してください。生成器の変更では、網羅の契約と照合器への影響も説明してください。
+List the steps to reproduce your results and the tests you ran. For generator changes, explain the effect on the coverage contract and the reference oracle.

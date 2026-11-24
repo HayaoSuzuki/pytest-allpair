@@ -1,8 +1,8 @@
-# 網羅の検証
+# Verifying coverage
 
-## Python の静的検査
+## Python static checks
 
-CI は Python 3.11 の構文と型を基準に、パッケージ、テスト、検証ツールを検査する。
+CI checks the package, tests, and verification tools using Python 3.11 syntax and types.
 
 ```sh
 uv sync --locked
@@ -11,13 +11,13 @@ uv run --locked --no-sync ruff format --check .
 uv run --locked --no-sync ty check
 ```
 
-## 網羅の照合
+## Coverage oracle
 
-Rust の生成器は各因子の候補数、次数、除外規則を受け取り、選んだ候補の番号を返す。小さなモデルでは、完全ケースを総当たりして有効な行を求め、そこに含まれる n 因子の組を生成結果と比較できる。`formal/coverage_oracle.rs` は、生成器の探索や枝刈りを共有せずに期待結果を計算する。
+The Rust generator takes a candidate count per factor, a coverage order, and exclusion rules. It returns the indices of the selected candidates. For small models, enumerate the valid complete cases and compare the n-way interactions they contain with those in the generated output. The reference oracle in `formal/coverage_oracle.rs` uses exhaustive enumeration to compute the expected result independently of the generator's search and pruning.
 
-## プロパティテストとランダムなテスト順
+## Property tests and randomized test order
 
-Rust の proptest は、因子数・水準・次数・除外規則を変えながら網羅集合を照合する。意味の等しい除外規則を並べ替えた場合も、生成行と順序が一致することを検査する。Python の Hypothesis は、同じ因子に複数の引数を持つモデルを生成し、pytest が収集したケースと、値の比較から求めた合法なケースを照合する。
+Rust's proptest varies the number of factors, their levels, the coverage order, and the exclusion rules, then compares the sets of interactions. It also checks that reordering equivalent exclusion rules preserves the generated rows and their order. Python's Hypothesis generates models with multiple arguments in one factor and compares the cases collected by pytest with the valid cases derived from comparisons of the original values.
 
 ```sh
 cargo test --workspace --locked
@@ -25,7 +25,7 @@ PROPTEST_CASES=1024 PROPTEST_RNG_SEED=812 cargo test --locked -p pytest-allpair-
 uv run --locked pytest --hypothesis-show-statistics
 ```
 
-CI では pytest-randomly がテスト順を変え、Rust は固定した nightly でもシャッフルを実行する。失敗時はログに出たシードで再現できる。Rust のシードはテストバイナリごとに表示される。
+CI runs Python tests in an order chosen by pytest-randomly and also runs the Rust tests with shuffling on a pinned nightly toolchain. To reproduce a failure, use the seed from the log. Rust prints a seed for each test binary.
 
 ```sh
 uv run --locked pytest --randomly-seed=812
@@ -33,13 +33,13 @@ cargo +nightly-2026-11-23 test --workspace --locked -- -Z unstable-options --shu
 cargo +nightly-2026-11-23 test --locked -p pytest-allpair-core --test coverage_properties -- -Z unstable-options --shuffle-seed 812
 ```
 
-## カバレッジに基づくファズテスト
+## Coverage-guided fuzzing
 
-最大5因子、各因子は最大3水準のモデルを対象に、libFuzzer が探索した入力を総当たり結果と照合する。`fuzz/` の Cargo ロックは独立して管理する。PR の CI は1,000回実行する。定期実行は60秒、手動実行は30・60・300秒から選べる。CI は発見したコーパスを再利用し、ログと失敗入力を成果物として保存する。
+The libFuzzer target compares generated results with exhaustive enumeration for models with at most five factors and three levels per factor. The `fuzz/` workspace has a separate Cargo lockfile. Pull request CI runs 1,000 iterations. The scheduled run lasts 60 seconds, and manual runs offer 30-, 60-, and 300-second budgets. CI reuses the discovered corpus and saves logs and failure inputs as artifacts.
 
 ```sh
 cargo install cargo-fuzz --version 0.13.2 --locked
 cargo +nightly-2026-11-23 fuzz run coverage -- -runs=1000 -seed=812
 ```
 
-[Quint と TLC の試行](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)では、三つの二値因子に対して枝刈りの条件を検査する。モデルで得た反例は Rust の回帰例に対応付ける。テストで使う照合器とプラグインの実行には Java や Quint は不要である。
+The Quint and TLC experiment checks pruning for three binary factors. Counterexamples from the model map to Rust regression cases. Only the experiment requires Java and Quint. [Quint and TLC experiment](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)

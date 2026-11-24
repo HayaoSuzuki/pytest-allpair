@@ -1,13 +1,13 @@
-# GitHub の設定
+# GitHub settings
 
-現行の [HayaoSuzuki/hoimin](https://github.com/HayaoSuzuki/hoimin/rules) に合わせ、[pytest-allpair のルールセット](https://github.com/HayaoSuzuki/pytest-allpair/rules)を適用済み。
+The pytest-allpair rulesets follow the hoimin configuration. [hoimin rulesets](https://github.com/HayaoSuzuki/hoimin/rules) · [pytest-allpair rulesets](https://github.com/HayaoSuzuki/pytest-allpair/rules)
 
-| 対象 | 保護 |
+| Scope | Protection |
 | --- | --- |
-| 既定ブランチ `main` | 削除と force push を禁止 |
-| `pytest-allpair-release-state` | 削除と force push を禁止 |
-| `v*` タグ | 既存タグの更新と削除を禁止 |
+| Default branch `main` | Block deletion and force pushes |
+| `pytest-allpair-release-state` | Block deletion and force pushes |
+| `v*` tags | Block updates to existing tags and deletion |
 
-ルールセットのバイパス対象は空とする。`main` の必須 CI チェックは空で、CI は `CI result` を報告する。マージ後のブランチ自動削除、PR ブランチの更新、Discussions を有効にし、Wiki と Projects を無効にする。
+The rulesets have empty bypass lists. CI reports `CI result`, and `main` has no required status checks. GitHub deletes merged branches, offers to update PR branches, and enables Discussions. Wiki and Projects are disabled.
 
-`Wheel builds` ワークフローは成果物として wheel を保存する。将来、リリース状態を Git に記録する場合は `pytest-allpair-release-state` を使う。
+The `Wheel builds` workflow uploads wheels as artifacts. Use `pytest-allpair-release-state` if the project starts tracking release state in Git.

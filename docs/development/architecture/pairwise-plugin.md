@@ -1,8 +1,8 @@
-# pytest-allpair の設計
+# pytest-allpair design
 
-## 目的と利用例
+## Purpose and example
 
-pytest の収集時に、宣言された因子から制約付きの n 因子組み合わせを生成する。生成したケースは pytest のパラメータとして登録し、通常どおり選択・実行できるようにする。
+At collection time, the plugin generates constraint-aware n-way combinations from the declared factors. It registers those cases as pytest parameters so pytest can select and run them as usual.
 
 ```python
 import pytest
@@ -17,66 +17,66 @@ def test_storage(os, filesystem, cache, mode):
     ...
 ```
 
-PICT を参照する範囲は網羅の次数、制約を適用する時点、生成の再現性である。初版の生成オプションは `order` と `exclude` とする。サブモデル、重み、シード行、負例の規則は後続の検討事項とする。 [PICT の仕様](https://github.com/microsoft/pict/blob/main/doc/pict.md)
+The design follows PICT on coverage order, when to apply constraints, and how to reproduce generated cases. The first release exposes `order` and `exclude`. Submodels, weights, seed rows, and negative-value rules remain candidates for later releases. [PICT documentation](https://github.com/microsoft/pict/blob/main/doc/pict.md)
 
-## pytest とのインターフェース
+## pytest interface
 
-`pairwise_parametrize(argnames, argvalues, *, ids=None, indirect=False, scope=None)` 一つを一因子とし、候補一行を一水準とする。たとえば `"input,expected"` の `(1, 2)` と `(3, 6)` は、それぞれ対応関係を保った一水準である。値が等しい候補行も位置で区別する。関数、クラス、モジュールに付いた因子を pytest のマーク探索順に集める。
+Each `pairwise_parametrize(argnames, argvalues, *, ids=None, indirect=False, scope=None)` declares a factor, and each candidate row is one level. For example, the candidates `(1, 2)` and `(3, 6)` for `"input,expected"` are separate levels that keep each input paired with its expected result. The plugin distinguishes equal candidate rows by position. It collects markers from functions, classes, and modules in pytest's marker lookup order.
 
-`pairwise(*, order=..., exclude=...)` は任意の設定マークで、関数に一つ付けられる。標準の `parametrize` と `fixture(params=...)` のケースは、専用マークから生成したケースと直積を取る。同じ引数を専用マークと標準の `parametrize`、または専用マークと `fixture(params=...)` の両方から指定すると、pytest の重複エラーになる。後者の扱いは `indirect=True` の場合も同じである。fixture に渡す候補を網羅対象にする場合、候補は専用マークに宣言する。 [pytest の fixture の収集処理](https://docs.pytest.org/en/stable/_modules/_pytest/fixtures.html#FixtureManager.pytest_generate_tests)
+The optional configuration marker `pairwise(*, order=..., exclude=...)` can appear once on a test function. Standard `parametrize` and `fixture(params=...)` form a Cartesian product with the generated cases. pytest reports a duplicate parametrization error if a factor and either of the standard mechanisms specify the same argument. That includes a duplicate fixture parameter declared with `indirect=True`. To include fixture values in the covering array, declare them on the factor marker. [pytest's fixture collection hook](https://docs.pytest.org/en/stable/_modules/_pytest/fixtures.html#FixtureManager.pytest_generate_tests)
 
-| 指定 | 生成するケースの網羅範囲 |
+| Setting | Coverage |
 | --- | --- |
-| 省略 | 因子数と 2 の小さい方の次数。1 因子なら全候補 |
-| `order=1` | 完全ケースに含められる各水準 |
-| `order=n` | 完全ケースに含められる n 因子の組。整数の範囲は 1 から因子数まで |
-| `order="max"` | 制約を満たす全完全ケース |
+| Omitted | Order 2 or the number of factors, whichever is smaller. With one factor, this covers every feasible level. |
+| `order=1` | Each level that can appear in a valid complete case |
+| `order=n` | Each feasible n-way interaction. The integer must be between 1 and the number of factors. |
+| `order="max"` | Every valid complete case |
 
-`pytest.param(..., marks=..., id=...)` のマークと ID、因子ごとの `ids`、および `indirect` を引き継ぐ。選ばれた水準のマークを組み合わせ、ID は因子順に連結する。ID の省略や重複は pytest の自動生成・一意化と整合する形で扱い、`pytest.HIDDEN_PARAM` を指定した因子の ID 部分は省く。生成行の ID 文字列は、この組み立て規則に従う。互換実装では、公開 API を優先し、pytest のバージョン差を扱う箇所を Python 側にまとめる。
+The plugin preserves marks and IDs from `pytest.param(..., marks=..., id=...)`, each factor's `ids`, and its `indirect` setting. It combines marks from the selected levels and joins ID fragments in factor order. pytest supplies missing IDs and resolves duplicates. A level with `pytest.HIDDEN_PARAM` contributes no ID fragment. The Python compatibility layer prefers public APIs and handles differences between pytest versions.
 
-`indirect` で指定した fixture には候補値を `request.param` として渡す。生成した表は一度の `Metafunc.parametrize` で登録するため、パラメータの `scope` を明示する場合は全因子に同じ値を指定する。省略時は pytest のスコープ推定に従う。 [pytest のパラメータ化](https://docs.pytest.org/en/stable/how-to/parametrize.html) · [Metafunc.parametrize](https://docs.pytest.org/en/stable/reference/reference.html#pytest.Metafunc.parametrize)
+Fixtures specified by `indirect` receive the candidate through `request.param`. The plugin registers the generated table in one call to `Metafunc.parametrize`, so every factor must specify the same scope if you set `scope`. If you omit it, pytest infers the scope. [pytest parametrization](https://docs.pytest.org/en/stable/how-to/parametrize.html) · [Metafunc.parametrize](https://docs.pytest.org/en/stable/reference/reference.html#pytest.Metafunc.parametrize)
 
-## 除外条件と収集エラー
+## Exclusions and collection errors
 
-`exclude` は引数名から値への辞書の列とする。一つの辞書では全項目の一致を求め、いずれかの辞書に一致したケースを禁止する。値は Python の等値比較で照合する。同じ値に一致する候補が複数あれば、該当する全候補を条件に含める。複数引数を持つ因子に対して、同じ辞書で複数の引数を指定した場合は、その全項目に一致する候補行を求める。
+`exclude` accepts a sequence of dictionaries that map argument names to values. A dictionary matches a full case when every entry matches using Python equality. Any matching dictionary excludes the case. If several candidates compare equal to a value, the rule covers all of them. If one dictionary names several arguments from the same factor, it matches only candidate rows that satisfy all of those entries.
 
-設定の重複・適用先の誤り、因子のない設定マーク、重複した引数名、不正な次数、不正な除外条件は収集エラーとする。不正な除外条件には空の辞書、未知の引数名、候補に存在しない値、真偽を判定できない等値比較を含める。候補リストが空の場合は pytest の `empty_parameter_set_mark` に従う。すべての因子に候補があり、除外条件によって有効な完全ケースがゼロになる場合は、テスト名と原因を示す収集エラーとする。
+Collection fails for duplicate or misplaced configuration markers, a configuration marker without factors, duplicate argument names, invalid orders, and invalid exclusions. Invalid exclusions include empty dictionaries, unknown argument names, values that match no candidate, and equality results that cannot be evaluated as booleans. An empty candidate list follows pytest's `empty_parameter_set_mark` setting. If every factor has candidates and exclusions rule out all complete cases, the collection error includes the test name and the cause.
 
-## 網羅の契約
+## Coverage contract
 
-完全ケースは各因子から一水準ずつ選んだ行である。すべての除外条件に従う完全ケースを有効とする。n 因子の組は、選んだ n 個の因子の位置と水準の位置で識別する。
+A complete case selects one level from each factor. A case is valid if it avoids every exclusion. An n-way interaction is identified by the positions of its n factors and their selected levels.
 
-生成器の成功条件は、すべての出力行が有効であり、**有効な完全ケースに含まれる n 因子の組が、出力のいずれかの行に含まれる**ことである。部分的に条件を満たす組でも、有効な完全ケースにできることを網羅の条件とする。網羅は生成された行に対する保証であり、`-k`、`-m`、`skip` などを適用した後の実行結果は選択やマークに従う。
+Every output row must be valid, and **every n-way interaction present in a valid complete case must appear in at least one output row**. An interaction qualifies for coverage if it can be extended to a valid complete case. Coverage applies to the generated rows. pytest selection and marks, including `-k`, `-m`, and `skip`, determine which rows run.
 
-同じバージョンで、因子と候補の順序、次数、除外条件が同じなら、生成結果の行と順序は同じになる。生成器は複数の組を一行で覆うように選ぶ。行数は、網羅条件を満たす範囲で生成器の選択に任せる。
+Within one version, the same factor order, candidate order, coverage order, and exclusions produce the same rows in the same order. The generator chooses rows that cover several interactions at once. It can choose any row count that meets the coverage contract.
 
-## 構成と実装方式
+## Repository layout and implementation
 
-| 場所 | 責務 |
+| Location | Responsibility |
 | --- | --- |
-| `crates/pytest-allpair-core/` | Rust で、有効な完全ケースを探索し、指定次数の組を網羅する |
-| `crates/pytest-allpair-python/` | PyO3 の接続と Python パッケージを置き、pytest のマーク、値、ID、fixture 指定を扱う |
-| `tests/` | pytest の収集・実行および配布物の統合テスト |
-| `formal/`、`fuzz/` | 参照照合器、形式検証の試行、小さなモデルを使った生成器のファズテスト |
-| `docs/user/`、`docs/development/` | 利用手順と開発者向けの設計・検証手順 |
-| `tools/`、`.github/workflows/`、`infra/` | ローカル検証と CI、配布基盤の設定 |
+| `crates/pytest-allpair-core/` | Search for valid complete cases and cover interactions of the requested order in Rust |
+| `crates/pytest-allpair-python/` | PyO3 bridge and Python package for pytest markers, values, IDs, and fixture settings |
+| `tests/` | Integration tests for pytest collection, execution, and distribution checks |
+| `formal/`, `fuzz/` | Reference oracle, formal verification experiments, and generator fuzzing with small models |
+| `docs/user/`, `docs/development/` | Usage, design, and verification guides |
+| `tools/`, `.github/workflows/`, `infra/` | Local verification, CI, and distribution configuration |
 
-ルートに Cargo ワークスペースと `pyproject.toml` を置く。maturin で配布し、pytest の `pytest11` エントリポイントでプラグインを読み込む。hoimin の補助ディレクトリは、同じ役割の成果物を置く場所として踏襲する。ライセンスは MIT とする。
+The root contains the Cargo workspace and `pyproject.toml`. maturin builds the distribution, and pytest loads the plugin through the `pytest11` entry point. Supporting directories follow the layout of hoimin. The project uses the MIT license.
 
-Python は因子ごとの候補数、次数、禁止条件を Rust に渡す。禁止条件は、該当する因子ごとに禁止対象の候補行番号の集合を持つ条件に変換する。一つの条件では、それに含まれるすべての因子で候補行番号が該当した場合に、その完全ケースを禁止する。Rust は選んだ候補行番号を返す。生成器は入力データだけで計算し、pytest、ファイル、ネットワーク、時計に依存しない。pytest とのやり取りは Python プラグインが担当し、PyO3 は番号の受け渡しとエラー変換を担当する。Python は番号から元の値、マーク、ID を取り出して pytest に登録する。
+Python passes the number of candidates per factor, the coverage order, and the exclusion rules to Rust. Each rule maps factor positions to sets of candidate row indices. A complete case matches a rule if its selected row index belongs to the specified set for every factor in that rule. The Rust generator computes the selected row indices from its inputs, independent of pytest, files, the network, and the clock. The Python plugin handles pytest, and PyO3 passes the numeric model and translates errors. Python uses the returned indices to recover the original values, marks, and IDs and register them with pytest.
 
-初版の生成器は、未網羅の組を一つずつ検討し、制約下で完成可能な組を起点に、複数の未網羅の組を覆う行を選ぶ。枝刈りで候補を絞る場合も、完成不能の判断は完全な探索で裏付ける。探索順と同点時の順序を固定し、完全ケースの直積を中間表として全件保持する処理を避ける。次数が因子数と等しい場合、必要な出力件数そのものが直積に達することがある。探索順、未網羅組の表現、枝刈りの具体的な条件は実装で決める。
+The first generator considers uncovered interactions in sequence. It uses an interaction that has a valid completion as the starting point for a row that can cover several interactions. Only an exhaustive search of the remaining candidates can establish that an interaction has no valid completion. The search order and tie-breaking are deterministic. The generator avoids materializing the Cartesian product as an intermediate table. When the order equals the number of factors, the required output itself can reach that size. The implementation chooses the search order, how to represent uncovered interactions, and the pruning conditions.
 
-採用方式は専用マークを集めて、生成後に公開フック `pytest_generate_tests` から登録する方式とする。標準マークに設定マークを一つ足して変換する方式は、変更箇所が少ない一方で、標準の展開を途中で差し替える必要がある。収集後に間引く方式は標準の ID やマークを直接利用できるが、pytest が直積のアイテムを生成してから間引く。専用マーク方式では、網羅の対象が宣言で分かり、完全ケースの生成前に制約を適用できる。
+The plugin collects dedicated markers and registers the generated cases through the public `pytest_generate_tests` hook. One option was to add a configuration marker to standard parametrization, which would require intercepting pytest's expansion. Another was to filter collected items using their existing IDs and marks, after pytest had expanded the full Cartesian product. Dedicated markers identify the factors in the declaration and allow the plugin to apply constraints before it generates complete cases.
 
-## 検証
+## Verification
 
-初版の必須検証は、小さなモデルで完全ケースを総当たりし、有効な行から得た n 因子の組の集合を Rust の出力と照合するテストである。期待結果との一致は、各行の合法性と網羅した組の集合で判定する。次数 1、2、3、最大次数、候補数が異なる因子、制約の組み合わせで初めて完成不能になる組、完全ケースがゼロのモデルを含める。ファズテストも同じ契約を生成された小さな入力で確認する。
+The first release must include tests that enumerate all complete cases for small models and compare the Rust output with the n-way interactions in the valid cases. The tests check that each generated row is valid and that the sets of covered and required interactions match. They cover orders 1, 2, 3, and the maximum, factors with different candidate counts, interactions made infeasible by a combination of rules, and models with no valid cases. Fuzz tests check the same contract on generated small inputs.
 
-基本の回帰例は二値の 3 因子 `A, B, C` で `A=0, B=0` を禁止するモデルである。有効な完全ケースは 6 件、網羅すべきペアは 11 組になる。制約なしで選んだ `000, 011, 101, 110` から `000` を除くと、合法な `A=0, C=0` と `B=0, C=0` のペアも落ちる。生成器の出力を照合すれば、この誤りを検出できる。
+The reference regression uses three binary factors `A, B, C` and forbids `A=0, B=0`. Six complete cases are valid, and the generator must cover 11 pairs. If you choose `000, 011, 101, 110` without considering constraints and then remove `000`, you lose the feasible pairs `A=0, C=0` and `B=0, C=0`. The coverage oracle detects this error.
 
-Quint と TLC は、枝刈りの正しさに絞って試行する。部分割当てを捨てる遷移に対し、有効な完全ケースに延長できないことを有限モデルで検査する。意図的に誤った枝刈りで反例が出るかを確認し、反例から取得した因子・次数・条件で Rust の公開入口に対する回帰テストを作れるか評価する。ITF と MBT の常設は、この試行の結果を基に判断する。 [Quint のモデルチェッカー](https://quint.sh/docs/model-checkers) · [ITF](https://apalache-mc.org/docs/adr/015adr-trace.html)
+The Quint and TLC experiment checks pruning. For the transition that discards a partial assignment, a finite model checks that the assignment cannot extend to a valid complete case. An intentionally flawed rule should yield a counterexample. The experiment evaluates whether the factors, order, and constraints from that counterexample can drive a regression test against the public Rust entry point. The results guide any decision to add ITF traces or model-based testing to routine verification. [Quint model checkers](https://quint.sh/docs/model-checkers) · [ITF](https://apalache-mc.org/docs/adr/015adr-trace.html)
 
-pytest 統合テストでは、複数引数の候補行、マークと ID、`indirect`、クラスとモジュールからの継承、標準のパラメータ化との混在、同じ引数の重複指定、その他の収集エラー、空の候補を実際に収集・実行して検証する。通常ビルドの CPython 3.11〜3.15 と pytest 8.4 系・9 系を対象とする。Linux、macOS、Windows では wheel をインストールし、自動読み込みとテストの実行まで確認する。
+The pytest integration tests collect and run cases with grouped arguments, marks and IDs, indirect fixtures, class and module markers, standard parametrization, duplicate arguments, other collection errors, and empty candidate lists. They target standard (GIL-enabled) builds of CPython 3.11 through 3.15 and pytest 8.4.x and 9.x. The Linux, macOS, and Windows checks install wheels and verify plugin discovery and execution.
 
-設計レビューでは、pytest の内部表現や Python の値が Rust の生成器に渡らないことと、参照照合器が生成器の探索ロジックを使わないことを確認する。性能は、低い次数の大きな直積を持つモデルで、ケース収集前の組み合わせ生成が必要な出力を生成できるかと、全完全ケースを保持しないかを確認する。
+During design review, check that PyO3 sends only the numeric model to Rust and that the reference oracle computes its results independently of the generator's search. For performance, use a low coverage order with a large Cartesian product. Check that the generator returns the required rows before pytest collects the cases without holding all complete cases in memory.

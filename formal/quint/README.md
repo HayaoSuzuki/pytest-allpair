@@ -1,8 +1,8 @@
-# 枝刈りの有限モデル
+# Finite model of pruning
 
-二値の因子 A、B、C に対し、A と B が両方 0 の行を除外する。部分割当ての未確定値は `-1` で表す。`SoundPrune` は、捨てた割当てがどの有効な完全ケースにも延長できないことを、合法な行の列挙で確認する。
+The model uses three binary factors, A, B, and C. It excludes rows where A and B are both 0 and represents unassigned values as `-1`. The `SoundPrune` invariant enumerates valid rows to check that no discarded assignment can extend to a valid complete case.
 
-Quint 0.33.1 と Java 21 で実行する。
+Run the model with Quint 0.33.1 and Java 21.
 
 ```sh
 quint typecheck formal/quint/pruning.qnt
@@ -10,15 +10,15 @@ quint verify formal/quint/pruning.qnt --backend=tlc --main Pruning --invariants 
 quint verify formal/quint/pruning.qnt --backend=tlc --main PruningMutant --invariants SoundPrune
 ```
 
-`Pruning` は 27 の到達可能状態を検査して違反がなかった。`PruningMutant` は A または B のどちらか一方が 0 の時点で枝を捨てる。`B=0, C=0` の部分割当てを捨てた反例が得られた。この割当ては `A=1` で合法な行にできる。
+TLC checked 27 reachable states in `Pruning` and found no violation. `PruningMutant` discards a branch when either A or B is 0. TLC found a counterexample in which the mutant discarded the partial assignment `B=0, C=0`. Setting `A=1` makes that assignment valid.
 
-同じ性質の違反を ITF に書き出すには、Apalache を使う。コマンドは違反を報告して終了する。
+Use Apalache to write a violation of the same invariant as an ITF trace. The command exits after reporting the violation.
 
 ```sh
 quint verify formal/quint/pruning.qnt --backend=apalache --main PruningMutant \
     --invariants SoundPrune --max-steps=1 --out-itf=pruning-mutant.itf.json
 ```
 
-Rust の `covers_feasible_pairs` は同じ因子と制約で公開関数を呼び、合法な行から得られる 11 組のペアを照合する。隔離したコピーで Rust の枝刈りを「全項に一致」から「一部でも一致」に変えると、網羅集合の差でこのテストが失敗した。通常の回帰検証にはこの公開関数のテストを使い、ITF はモデルの反例を調査するときに生成する。
+The Rust test `covers_feasible_pairs` calls the public generator with the same factors and constraint and checks the 11 pairs from the valid rows. In an isolated copy of the Rust code, we changed the pruning condition from a match on every term to a match on any term. The test failed because the generated set of pairs differed from the expected set. Keep the public-generator test in the regression suite and generate ITF traces when investigating model counterexamples.
 
-TLC の結果は、この有限モデルで記述した枝刈りの条件に対するものである。任意の因子数や Rust の探索全体は、網羅の照合器とファズテストで検証する。
+TLC checks the pruning rule within this finite model. The coverage oracle and fuzz tests exercise the Rust search with varying numbers of factors.
