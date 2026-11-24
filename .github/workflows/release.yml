@@ -42,6 +42,11 @@ jobs:
       - name: Test automatic plugin discovery from the wheel
         shell: bash
         run: python -I tools/wheel_smoke.py dist/*.whl
+      - name: Test installation from a source distribution
+        if: runner.os == 'Linux'
+        run: |
+          uvx maturin@1.16.0 sdist --out dist
+          python -I tools/wheel_smoke.py dist/*.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wheel-${{ matrix.os }}

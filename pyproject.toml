@@ -24,6 +24,10 @@ bindings = "pyo3"
 manifest-path = "crates/pytest-allpair-python/Cargo.toml"
 python-source = "crates/pytest-allpair-python/python"
 module-name = "pytest_allpair._native"
+include = [
+    { path = "rust-toolchain.toml", format = "sdist" },
+    { path = "formal/coverage_oracle.rs", format = "sdist" },
+]
 
 [dependency-groups]
 dev = ["mkdocs>=1.6,<2", "ruff>=0.17,<0.18"]

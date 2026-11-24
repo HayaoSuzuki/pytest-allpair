@@ -1,4 +1,4 @@
-"""Check plugin discovery and n-way coverage from an installed wheel."""
+"""Check plugin discovery and n-way coverage from an installed distribution."""
 
 import os
 import subprocess
@@ -6,6 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 from textwrap import dedent
+from venv import EnvBuilder
 
 _SMOKE = """
 from itertools import combinations, product
@@ -33,19 +34,23 @@ def test_installed_plugin(a, b, c):
 """
 
 
-def main(wheel: Path) -> None:
-    wheel = wheel.resolve(strict=True)
+def main(distribution: Path) -> None:
+    distribution = distribution.resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="pytest-allpair-wheel-") as directory:
         project = Path(directory)
         environment = project / "venv"
-        subprocess.run(
-            ["uv", "venv", "--python", sys.executable, str(environment)],
-            cwd=project,
-            check=True,
-        )
+        EnvBuilder(with_pip=True, symlinks=os.name != "nt").create(environment)
         python = environment / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
         subprocess.run(
-            ["uv", "pip", "install", "--python", str(python), str(wheel)],
+            [
+                str(python),
+                "-I",
+                "-m",
+                "pip",
+                "--disable-pip-version-check",
+                "install",
+                str(distribution),
+            ],
             cwd=project,
             check=True,
         )
@@ -63,5 +68,5 @@ def main(wheel: Path) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        raise SystemExit("usage: python tools/wheel_smoke.py WHEEL_PATH")
+        raise SystemExit("usage: python tools/wheel_smoke.py DISTRIBUTION_PATH")
     main(Path(sys.argv[1]))

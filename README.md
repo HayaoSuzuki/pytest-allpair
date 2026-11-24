@@ -5,6 +5,7 @@ pytest の収集時に、制約を満たす n 因子の組を網羅するテス�
 ソースからインストールするには Rust と通常ビルドの CPython 3.11〜3.15 が必要です。
 
 ```sh
+uv venv
 uv pip install .
 ```
 
