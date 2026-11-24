@@ -67,7 +67,10 @@ gh variable set PYPI_AUTO_PUBLISH --repo HayaoSuzuki/pytest-allpair --body true
 
 Each update to `main`, including a merged pull request, starts the release
 workflow. It reserves the version tag, builds and verifies the three wheels,
-publishes the GitHub Release, and promotes it through TestPyPI to PyPI.
+and publishes the GitHub Release. It then dispatches a separate promotion run
+on `main`. That run verifies TestPyPI before publishing to PyPI. Track both runs
+to confirm publication. Automatic and manual promotion of the same tag run
+one at a time.
 
 The version advances one patch per first-parent commit after `v0.1.0`. A higher
 committed version sets a new minimum. Runs can finish in either order and each

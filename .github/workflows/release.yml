@@ -66,6 +66,7 @@ jobs:
           [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           if [[ "$OPERATION" == 'release' ]]; then
             test "$commit" = "$GITHUB_SHA"
+            test "$tag" = "$(python3 -m tools.release_assets tag)"
           fi
           {
             echo "tag=$tag"
@@ -112,6 +113,8 @@ jobs:
   assemble:
     name: Validate release files and extract SBOMs
     needs: [config, wheels]
+    if: >-
+      !cancelled() && needs.config.result == 'success' && needs.wheels.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -135,7 +138,9 @@ jobs:
   attest-inventory:
     name: Attest the release inventory
     needs: [config, assemble]
-    if: needs.config.outputs.operation == 'release' || needs.config.outputs.operation == 'automatic'
+    if: >-
+      !cancelled() && needs.config.result == 'success' && needs.assemble.result == 'success' &&
+      (needs.config.outputs.operation == 'release' || needs.config.outputs.operation == 'automatic')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -165,7 +170,9 @@ jobs:
   attest-wheels:
     name: Attest wheel and SBOM (${{ matrix.platform }})
     needs: [config, assemble]
-    if: needs.config.outputs.operation == 'release' || needs.config.outputs.operation == 'automatic'
+    if: >-
+      !cancelled() && needs.config.result == 'success' && needs.assemble.result == 'success' &&
+      (needs.config.outputs.operation == 'release' || needs.config.outputs.operation == 'automatic')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -231,6 +238,9 @@ jobs:
   github-release:
     name: Publish the verified GitHub release
     needs: [config, assemble, attest-inventory, attest-wheels]
+    if: >-
+      !cancelled() && needs.config.result == 'success' && needs.assemble.result == 'success' &&
+      needs.attest-inventory.result == 'success' && needs.attest-wheels.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -259,13 +269,29 @@ jobs:
           gh release create "$TAG" dist/* proofs/*.sigstore.json \
             --title "$TAG" --generate-notes --verify-tag
 
-  stage:
-    name: Verify and stage the original GitHub release
+  dispatch-pypi:
+    name: Start PyPI promotion for this release
     needs: [config, github-release]
     if: >-
       !cancelled() && needs.config.result == 'success' &&
-      (needs.config.outputs.operation == 'testpypi' || needs.config.outputs.operation == 'pypi' ||
-       (needs.config.outputs.operation == 'automatic' && needs.github-release.result == 'success'))
+      needs.config.outputs.operation == 'automatic' && needs.github-release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.config.outputs.tag }}
+        run: |
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f operation=pypi -f "tag=$TAG"
+
+  stage:
+    name: Verify and stage the original GitHub release
+    needs: config
+    if: >-
+      needs.config.outputs.operation == 'testpypi' || needs.config.outputs.operation == 'pypi'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -296,7 +322,7 @@ jobs:
           testpypi_present="$(uv run --locked --no-sync python -m tools.pypi_pipeline inspect upload \
             --index testpypi --tag "$TAG" --commit "$COMMIT")"
           echo "testpypi-present=$testpypi_present" >> "$GITHUB_OUTPUT"
-          if [[ "$OPERATION" == 'pypi' || "$OPERATION" == 'automatic' ]]; then
+          if [[ "$OPERATION" == 'pypi' ]]; then
             pypi_present="$(uv run --locked --no-sync python -m tools.pypi_pipeline inspect upload \
               --index pypi --tag "$TAG" --commit "$COMMIT")"
             echo "pypi-present=$pypi_present" >> "$GITHUB_OUTPUT"
@@ -310,13 +336,12 @@ jobs:
   testpypi-publish:
     name: Upload wheels to testpypi
     needs: [config, stage]
-    if: ${{ needs.stage.outputs.testpypi-present == 'false' }}
+    if: >-
+      !cancelled() && needs.config.result == 'success' && needs.stage.result == 'success' &&
+      needs.stage.outputs.testpypi-present == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: testpypi
-    concurrency:
-      group: upload-testpypi-${{ needs.config.outputs.tag }}
-      cancel-in-progress: false
     permissions:
       id-token: write
     steps:
@@ -364,13 +389,12 @@ jobs:
   pypi-publish:
     name: Upload wheels to pypi
     needs: [config, stage, verify-testpypi]
-    if: ${{ needs.stage.outputs.pypi-present == 'false' }}
+    if: >-
+      !cancelled() && needs.config.result == 'success' && needs.stage.result == 'success' &&
+      needs.verify-testpypi.result == 'success' && needs.stage.outputs.pypi-present == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
-    concurrency:
-      group: upload-pypi-${{ needs.config.outputs.tag }}
-      cancel-in-progress: false
     permissions:
       id-token: write
     steps:
@@ -388,8 +412,8 @@ jobs:
     name: Verify pypi wheels and attestations
     needs: [config, stage, verify-testpypi, pypi-publish]
     if: >-
-      ${{ !cancelled() && (needs.config.outputs.operation == 'pypi' ||
-      needs.config.outputs.operation == 'automatic') && needs.verify-testpypi.result == 'success' &&
+      ${{ !cancelled() && needs.config.outputs.operation == 'pypi' &&
+      needs.verify-testpypi.result == 'success' &&
       needs.stage.result == 'success' &&
       (needs.pypi-publish.result == 'success' || needs.pypi-publish.result == 'skipped') }}
     runs-on: ubuntu-latest
