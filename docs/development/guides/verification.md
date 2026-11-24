@@ -16,4 +16,4 @@ cargo +nightly fuzz run coverage -- -runs=1000
 
 pytest の統合テストは、マークと ID の取り扱い、fixture への値の受け渡し、標準のパラメータ化との混在を、実際の pytest 収集と実行で確認する。pytest 8.4 系と 9 系は別の仮想環境に入れて検証する。
 
-[Quint と TLC の試行](../../../formal/quint/README.md)では、三つの二値因子に対して枝刈りの条件を検査する。モデルで得た反例は Rust の回帰例に対応付ける。テストで使う照合器とプラグインの実行には Java や Quint は不要である。
+[Quint と TLC の試行](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)では、三つの二値因子に対して枝刈りの条件を検査する。モデルで得た反例は Rust の回帰例に対応付ける。テストで使う照合器とプラグインの実行には Java や Quint は不要である。

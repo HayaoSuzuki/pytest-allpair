@@ -30,7 +30,9 @@ def _factor(argnames, argvalues, *, ids=None, indirect=False, scope=None, metafu
     ):
         indirect_names = tuple(indirect)
     else:
-        raise ValueError("indirect must be a boolean or a sequence of parameter names from the factor")
+        raise ValueError(
+            "indirect must be a boolean or a sequence of parameter names from the factor"
+        )
     if scope is not None and scope not in ("function", "class", "module", "package", "session"):
         raise ValueError("scope must be a pytest fixture scope")
     return Factor(names, levels, indirect_names, scope)
@@ -53,13 +55,13 @@ def _order(order: object, count: int) -> int:
 def _matching_levels(factor: Factor, column: int, name: str, wanted: object) -> set[int]:
     try:
         matching = {
-            index
-            for index, level in enumerate(factor.levels)
-            if level.values[column] == wanted
+            index for index, level in enumerate(factor.levels) if level.values[column] == wanted
         }
     except Exception as error:
         # Python values are opaque to Rust. Equality may raise or have no scalar truth value.
-        raise ValueError(f"cannot evaluate equality for excluded parameter {name!r}: {error}") from error
+        raise ValueError(
+            f"cannot evaluate equality for excluded parameter {name!r}: {error}"
+        ) from error
     if not matching and factor.levels:
         raise ValueError(f"excluded value for parameter {name!r} matches no candidate")
     return matching
@@ -68,7 +70,7 @@ def _matching_levels(factor: Factor, column: int, name: str, wanted: object) -> 
 def _exclusions(factors: Sequence[Factor], exclude: object) -> list[list[tuple[int, list[int]]]]:
     """Compile conjunctions into level sets, intersecting columns of the same factor."""
     if not isinstance(exclude, Sequence) or isinstance(exclude, (str, bytes)):
-        raise ValueError("exclude must be a sequence of nonempty mappings")
+        raise TypeError("exclude must be a sequence of nonempty mappings")
     positions = {
         name: (axis, column)
         for axis, factor in enumerate(factors)
@@ -129,7 +131,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         if len(options) > 1:
             raise ValueError("only one pairwise configuration is allowed per test function")
         if not marks:
-            raise ValueError("pairwise configuration requires at least one pairwise_parametrize factor")
+            raise ValueError(
+                "pairwise configuration requires at least one pairwise_parametrize factor"
+            )
 
         factors = [_factor(*mark.args, **mark.kwargs, metafunc=metafunc) for mark in marks]
         names = [name for factor in factors for name in factor.names]

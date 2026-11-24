@@ -24,3 +24,11 @@ bindings = "pyo3"
 manifest-path = "crates/pytest-allpair-python/Cargo.toml"
 python-source = "crates/pytest-allpair-python/python"
 module-name = "pytest_allpair._native"
+
+[dependency-groups]
+dev = ["mkdocs>=1.6,<2", "ruff>=0.17,<0.18"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["*.md"]

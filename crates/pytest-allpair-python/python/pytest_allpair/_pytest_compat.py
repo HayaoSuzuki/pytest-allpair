@@ -39,6 +39,10 @@ def parameter_rows(
     # Let pytest own fallback IDs, its ID hook, escaping, and per-factor duplicates.
     resolved = metafunc._resolve_parameter_set_ids(names, ids, sets, metafunc.definition.nodeid)
     return names, tuple(
-        Level(tuple(parameters.values), tuple(parameters.marks), fragment if isinstance(fragment, str) else None)
+        Level(
+            tuple(parameters.values),
+            tuple(parameters.marks),
+            fragment if isinstance(fragment, str) else None,
+        )
         for parameters, fragment in zip(sets, resolved, strict=True)
     )

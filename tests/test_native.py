@@ -1,11 +1,13 @@
 import pytest
-
 from pytest_allpair import _native
 
 
 def test_native_solves_two_by_two():
     assert {tuple(row) for row in _native.generate([2, 2], 2, [])} == {
-        (0, 0), (0, 1), (1, 0), (1, 1)
+        (0, 0),
+        (0, 1),
+        (1, 0),
+        (1, 1),
     }
 
 

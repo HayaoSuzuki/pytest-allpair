@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  rust:
+    name: Rust workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+  pytest:
+    name: Python ${{ matrix.python }} / pytest ${{ matrix.pytest }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13', '3.14', '3.15']
+        pytest: ['8.4', '9']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Test the selected pytest series
+        env:
+          PYTEST_SERIES: ${{ matrix.pytest }}
+          PYTHON_VERSION: ${{ matrix.python }}
+        run: |
+          if [[ "$PYTEST_SERIES" == '8.4' ]]; then
+            pytest_requirement='pytest>=8.4,<9'
+          else
+            pytest_requirement='pytest>=9,<10'
+          fi
+          uv venv --python "$PYTHON_VERSION"
+          uv pip install --python .venv/bin/python --editable . "$pytest_requirement"
+          .venv/bin/python -m pytest -q
+
+  quality:
+    name: Python and documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --python 3.13 --locked --only-group dev
+      - run: uv run --locked --no-sync ruff check .
+      - run: uv run --locked --no-sync ruff format --check .
+      - run: uv run --locked --no-sync mkdocs build --strict
+
+  wheels:
+    name: Wheel verification
+    uses: ./.github/workflows/release.yml
+
+  result:
+    name: CI result
+    needs: [rust, pytest, quality, wheels]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUST_RESULT: ${{ needs.rust.result }}
+      PYTEST_RESULT: ${{ needs.pytest.result }}
+      QUALITY_RESULT: ${{ needs.quality.result }}
+      WHEELS_RESULT: ${{ needs.wheels.result }}
+    steps:
+      - name: Report required job outcomes
+        run: |
+          for outcome in "$RUST_RESULT" "$PYTEST_RESULT" "$QUALITY_RESULT" "$WHEELS_RESULT"; do
+            test "$outcome" = success
+          done

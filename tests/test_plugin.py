@@ -59,7 +59,11 @@ def test_grouped_values_and_ids(pytester):
     )
     collected = pytester.runpytest_subprocess("--collect-only", "-q")
     assert collected.ret == pytest.ExitCode.OK
-    ids = [line.split("::test_matrix", 1)[1] for line in collected.stdout.lines if "::test_matrix" in line]
+    ids = [
+        line.split("::test_matrix", 1)[1]
+        for line in collected.stdout.lines
+        if "::test_matrix" in line
+    ]
     assert set(ids) == {"[v1-v2]", "[v1-v2-label]", "[known]", "[known-label]"}
     pytester.runpytest_subprocess("-q").assert_outcomes(passed=2, xfailed=2)
 
@@ -102,7 +106,10 @@ def test_exclusions_match_every_equal_level(pytester):
     assert result.ret == pytest.ExitCode.OK
     names = {line.partition("::")[2] for line in result.stdout.lines if "::" in line}
     assert names == {
-        "test_unfiltered[first]", "test_unfiltered[second]", "test_unfiltered[third]", "test_filtered[third]"
+        "test_unfiltered[first]",
+        "test_unfiltered[second]",
+        "test_unfiltered[third]",
+        "test_filtered[third]",
     }
     pytester.runpytest_subprocess("-q").assert_outcomes(passed=4)
 
@@ -214,9 +221,9 @@ def test_invalid_declarations(pytester, declaration, message):
             def __eq__(self, other):
                 raise ValueError("no truth value")
 
-        {declaration.replace(chr(10), chr(10) + '        ')}
+        {declaration.replace(chr(10), chr(10) + "        ")}
         {axis}
-        @pytest.mark.pairwise_parametrize("b", [0, 1]{', scope="module"' if 'scope="session"' in declaration else ''})
+        @pytest.mark.pairwise_parametrize("b", [0, 1]{', scope="module"' if 'scope="session"' in declaration else ""})
         def test_matrix(a, b):
             pass
         """
