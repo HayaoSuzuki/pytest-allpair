@@ -32,3 +32,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 /site/
+
+# Local formal verification output
+/_apalache-out/
