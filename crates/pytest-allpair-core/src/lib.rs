@@ -4,7 +4,9 @@
 //! from pytest, a standalone application, or a test oracle.
 
 use std::collections::BTreeSet;
+use std::convert::Infallible;
 use std::fmt;
+use std::ops::ControlFlow;
 
 /// A conjunction of factor/level-set matches that excludes a complete row.
 #[derive(Debug)]
@@ -46,12 +48,12 @@ pub fn generate(
     let mut rows = Vec::new();
 
     if order == level_counts.len() {
-        model.visit_completions(
+        let _ = model.visit_completions(
             &mut vec![None; level_counts.len()],
             |_, _, _| 0,
             |row| {
-                rows.push(complete(row));
-                false
+                rows.push(row);
+                ControlFlow::<Infallible>::Continue(())
             },
         );
     } else {
@@ -69,16 +71,12 @@ pub fn generate(
                 for (axis, level) in seed {
                     partial[axis] = Some(level);
                 }
-                let mut found = None;
-                model.visit_completions(
+                let completion = model.visit_completions(
                     &mut partial,
                     |row, axis, level| coverage_gain(row, axis, level, order, &covered),
-                    |row| {
-                        found = Some(complete(row));
-                        true
-                    },
+                    ControlFlow::Break,
                 );
-                if let Some(row) = found {
+                if let ControlFlow::Break(row) = completion {
                     covered.extend(
                         combinations(level_counts.len(), order)
                             .map(|axes| axes.into_iter().map(|axis| (axis, row[axis])).collect()),
@@ -146,21 +144,20 @@ impl<'a> Model<'a> {
         })
     }
 
-    /// Try complete rows in score order. The visitor returns true to stop.
+    /// Visit legal completions in score order. A break returns the visitor's value.
     /// The stack holds choices only for the unresolved suffix of the current path.
-    fn visit_completions(
+    fn visit_completions<B>(
         &self,
         row: &mut [Option<usize>],
         score: impl Fn(&[Option<usize>], usize, usize) -> usize,
-        mut visit: impl FnMut(&[Option<usize>]) -> bool,
-    ) {
+        mut visit: impl FnMut(Vec<usize>) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if self.excludes(row) {
-            return;
+            return ControlFlow::Continue(());
         }
         let gaps: Vec<_> = (0..row.len()).filter(|&axis| row[axis].is_none()).collect();
         let Some(&first) = gaps.first() else {
-            visit(row);
-            return;
+            return visit(complete(row));
         };
         let rank = |row: &[Option<usize>], axis: usize| {
             let mut candidates: Vec<_> = (0..self.level_counts[axis])
@@ -174,21 +171,24 @@ impl<'a> Model<'a> {
         while !stack.is_empty() {
             let depth = stack.len() - 1;
             let axis = gaps[depth];
-            if let Some((_, level)) = stack[depth].next() {
-                row[axis] = Some(level);
-                if self.excludes(row) {
-                    continue;
+            match stack[depth].next() {
+                Some((_, level)) => {
+                    row[axis] = Some(level);
+                    if self.excludes(row) {
+                        continue;
+                    }
+                    match gaps.get(depth + 1) {
+                        Some(&next) => stack.push(rank(row, next)),
+                        None => visit(complete(row))?,
+                    }
                 }
-                if let Some(&next) = gaps.get(depth + 1) {
-                    stack.push(rank(row, next));
-                } else if visit(row) {
-                    return;
+                None => {
+                    row[axis] = None;
+                    stack.pop();
                 }
-            } else {
-                row[axis] = None;
-                stack.pop();
             }
         }
+        ControlFlow::Continue(())
     }
 }
 
