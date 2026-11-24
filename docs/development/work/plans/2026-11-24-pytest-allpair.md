@@ -18,6 +18,8 @@
 - 同じバージョンで、因子と候補の順序、次数、除外条件が同じなら、生成結果の行と順序は同じになる。
 - 完全ケースの直積を中間表として全件保持する処理を避ける。参照照合器の入力は小さなモデルに限定する。
 - 各タスクを独立したテストとコミットで完了させる。発行用アカウントへの公開は別の作業とする。
+- GitHub の既定ブランチは `main`。削除と force push を禁止する。現行の `HayaoSuzuki/hoimin` と同じく、CI の結果は GitHub 上に報告し、必須マージ条件の設定は空とする。
+- 将来のリリース予約ブランチは `pytest-allpair-release-state` を使う。このブランチの削除と force push、および `v*` タグの変更と削除は、適用済みのルールセットで禁止する。
 
 ## Review Focus
 
@@ -116,5 +118,6 @@ pub fn generate(
 
 - [ ] wheel のスモークテストに二値3因子の利用例を置く。成功件数に加え、実行された行のペア集合が全12組であることを確認する。自動読み込みが無効な構成でスモークが失敗することを確かめ、通常構成で成功させる。
 - [ ] `uv run` で Rust の検査と pytest の統合テストを再現できる手順を用意する。CI では CPython 3.11、3.12、3.13、3.14、3.15 と pytest 8.4 系・9 系を組み合わせて確認する。Linux、macOS、Windows で `maturin build --release --locked` から生成した wheel のスモークテストを走らせる。Linux の配布 wheel は manylinux 2.28 のビルド環境で作り、生成物の manylinux タグを確認する。hoimin の対応する検査・配布ワークフローに沿って責務を分け、配布用ビルドは成果物を保存する。
+- [ ] `infra/README.md` に適用済みの GitHub ルールセットと、マージ後のブランチ自動削除、PR ブランチ更新、Discussions の設定を記録する。リリース用ブランチを参照するときは `pytest-allpair-release-state` を使う。 [GitHub のルールセット](https://github.com/HayaoSuzuki/pytest-allpair/rules)
 - [ ] 利用者向け文書に、インストール、基本例、`order=3` と `exclude`、通常の `parametrize` との混在、空の候補と収集エラーを掲載する。開発者向け文書に、網羅照合、ファズテスト、Quint の試行、wheel の確認手順を載せる。
 - [ ] `cargo fmt --all --check`、`cargo clippy --workspace --all-targets --locked -- -D warnings`、`cargo test --workspace --locked`、`uv run --locked pytest -q`、対象環境での wheel スモークテストを実行する。公開する契約と実装の対応、pytest 固有の表現が Rust コアに入っていないこと、直積の中間表がないことをレビューし、検証結果を記録してコミットする。
