@@ -4,16 +4,7 @@ module BinaryExclusions {
   pure val binaryCounts = List(2, 2, 2)
   pure val binaryRows = assignments(binaryCounts, 0)
 
-  // Candidate levels are lexicographic within an axis combination.
-  pure def candidateRows(mask: Set[int]): List[Row] =
-    range(0, binaryCounts.length()).foldl(List(List()), (prefixes, axis) => {
-      val low = if (mask.contains(axis)) 0 else -1
-      val high = if (mask.contains(axis)) binaryCounts[axis] else 0
-      prefixes.foldl(List(), (rows, prefix) =>
-        range(low, high).foldl(rows, (allRows, level) => allRows.append(prefix.append(level))))
-    })
-
-  pure val orderedBinaryRows = candidateRows(binaryCounts.indices())
+  pure val orderedBinaryRows = orderedAssignments(binaryCounts, binaryCounts.indices())
 
   // A full-row exclusion can encode any forbidden subset of the Boolean cube.
   pure def binaryProblem(order: int, forbidden: Set[Row]): Problem = {
@@ -35,8 +26,15 @@ module BinaryExclusions {
 module OrderedCoveringTransitions {
   import CoveringDomain.* from "./covering"
   import BinaryExclusions.*
+  import RankedSearch.* from "./ranked_search"
 
-  type CoverageInput = { legal: Set[Row], order: int, masks: List[Set[int]], required: Set[Row] }
+  type CoverageInput = {
+    counts: List[int],
+    legal: Set[Row],
+    order: int,
+    masks: List[Set[int]],
+    required: Set[Row],
+  }
   type CoveringState = { pending: List[Row], selected: List[Row], covered: Set[Row] }
   // Addition holds zero or one selected row. Cache is the set after the seed is processed.
   type CoveringEvent = { seed: Row, addition: List[Row], cache: Set[Row] }
@@ -49,21 +47,25 @@ module OrderedCoveringTransitions {
         .concat(suffixes)
     }).select(axes => axes.size() == order)
 
-  pure def seedSequence(masks: List[Set[int]]): List[Row] =
-    masks.foldl(List(), (seeds, mask) => seeds.concat(candidateRows(mask)))
+  pure def seedSequence(counts: List[int], masks: List[Set[int]]): List[Row] =
+    masks.foldl(List(), (seeds, mask) => seeds.concat(orderedAssignments(counts, mask)))
 
-  pure def coveringInput(order: int, forbidden: Set[Row]): CoverageInput = {
-    val legal = legalRows(binaryProblem(order, forbidden))
+  pure def coveringInputFor(problem: Problem): CoverageInput = {
+    val legal = legalRows(problem)
     {
+      counts: problem.counts,
       legal: legal,
-      order: order,
-      masks: axisCombinations(binaryCounts.length(), order),
-      required: interactions(order, legal),
+      order: problem.order,
+      masks: axisCombinations(problem.counts.length(), problem.order),
+      required: interactions(problem.order, legal),
     }
   }
 
+  pure def coveringInput(order: int, forbidden: Set[Row]): CoverageInput =
+    coveringInputFor(binaryProblem(order, forbidden))
+
   pure def startCovering(input: CoverageInput): CoveringState =
-    { pending: seedSequence(input.masks), selected: List(), covered: Set() }
+    { pending: seedSequence(input.counts, input.masks), selected: List(), covered: Set() }
 
   // All observations allowed by one transition, regardless of the search scoring.
   pure def nextEvents(input: CoverageInput, state: CoveringState): Set[CoveringEvent] =
@@ -80,7 +82,15 @@ module OrderedCoveringTransitions {
       }
     }
 
-  // Apply an event admitted by nextEvents.
+  pure def rankedEvents(input: CoverageInput, state: CoveringState): Set[CoveringEvent] = {
+    val allowed = nextEvents(input, state)
+    if (allowed.size() < 2) allowed else {
+      val best = firstRankedCompletion(state.pending.head(), input.order, state.covered, input.legal)
+      allowed.filter(event => event.addition == best)
+    }
+  }
+
+  // Apply an event admitted by the covering transition.
   pure def advance(state: CoveringState, event: CoveringEvent): CoveringState =
     { pending: state.pending.tail(), selected: state.selected.concat(event.addition), covered: event.cache }
 }
@@ -91,6 +101,7 @@ module OrderedCoveringModel {
   import OrderedCoveringTransitions.*
 
   const OMIT_CACHE_UPDATE: bool
+  const USE_RANKING: bool
   var input: CoverageInput
   var cover: CoveringState
 
@@ -104,14 +115,18 @@ module OrderedCoveringModel {
   pure def asSet(rows: List[Row]): Set[Row] = rows.indices().map(index => rows[index])
 
   action init = {
-    nondet order = 1.to(binaryCounts.length()).oneOf()
+    val highestOrder = if (USE_RANKING) binaryCounts.length() - 1 else binaryCounts.length()
+    nondet order = 1.to(highestOrder).oneOf()
     nondet forbidden = binaryRows.powerset().oneOf()
     val initial = coveringInput(order, forbidden)
     all { input' = initial, cover' = startCovering(initial) }
   }
 
+  val allowedEvents = if (USE_RANKING) rankedEvents(input, cover) else nextEvents(input, cover)
+  val ExactlyOneChoice = cover.pending == List() or allowedEvents.size() == 1
+
   action step = if (cover.pending == List()) all { input' = input, cover' = cover } else {
-    nondet event = nextEvents(input, cover).oneOf()
+    nondet event = allowedEvents.oneOf()
     val following = advance(cover, event)
     all {
       input' = input,
@@ -120,7 +135,7 @@ module OrderedCoveringModel {
   }
 
   val SeedEnumeration = {
-    val seeds = seedSequence(input.masks)
+    val seeds = seedSequence(input.counts, input.masks)
     val expected = interactions(input.order, binaryRows)
     val offset = seeds.length() - cover.pending.length()
     all {
@@ -147,9 +162,13 @@ module BinaryDepthFirst {
 }
 
 module BinaryCovering {
-  import OrderedCoveringModel(OMIT_CACHE_UPDATE = false).*
+  import OrderedCoveringModel(OMIT_CACHE_UPDATE = false, USE_RANKING = false).*
 }
 
 module BinaryCoveringMutant {
-  import OrderedCoveringModel(OMIT_CACHE_UPDATE = true).*
+  import OrderedCoveringModel(OMIT_CACHE_UPDATE = true, USE_RANKING = false).*
+}
+
+module RankedBinaryCovering {
+  import OrderedCoveringModel(OMIT_CACHE_UPDATE = false, USE_RANKING = true).*
 }

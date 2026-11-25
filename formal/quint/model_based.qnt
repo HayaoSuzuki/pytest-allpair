@@ -3,8 +3,14 @@ module ConnectCoverage {
   import CoveringExamples.* from "./covering"
   import BinaryExclusions.* from "./exhaustive"
   import GeneratedProblems.* from "./generated_inputs"
+  import RankedSearch.* from "./ranked_search"
 
-  type Observation = { no_valid_cases: bool, legal_unique_rows: bool, covered: Set[Row] }
+  type Observation = {
+    no_valid_cases: bool,
+    legal_unique_rows: bool,
+    covered: Set[Row],
+    full_order_rows: List[Row],
+  }
   var observed: Observation
 
   pure val catalog = problems.indices().map(i => problems[i])
@@ -13,7 +19,13 @@ module ConnectCoverage {
 
   pure def expected(scenario: Problem): Observation = {
     val legal = legalRows(scenario)
-    { no_valid_cases: legal == Set(), legal_unique_rows: true, covered: interactions(scenario.order, legal) }
+    {
+      no_valid_cases: legal == Set(),
+      legal_unique_rows: true,
+      covered: interactions(scenario.order, legal),
+      full_order_rows: if (scenario.order == scenario.counts.length())
+        orderedLegalRows(scenario.counts, legal) else List(),
+    }
   }
 
   action init = {

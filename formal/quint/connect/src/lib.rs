@@ -80,6 +80,7 @@ mod tests {
         no_valid_cases: bool,
         legal_unique_rows: bool,
         covered: BTreeSet<Vec<i64>>,
+        full_order_rows: Vec<Vec<usize>>,
     }
 
     struct CoverageDriver<'a> {
@@ -102,6 +103,7 @@ mod tests {
                     no_valid_cases: true,
                     legal_unique_rows: true,
                     covered: BTreeSet::new(),
+                    full_order_rows: Vec::new(),
                 },
                 Err(error) => return Err(error).context(scenario.name),
             };
@@ -171,6 +173,11 @@ mod tests {
             no_valid_cases: false,
             legal_unique_rows: legal.len() == rows.len(),
             covered,
+            full_order_rows: if scenario.order == scenario.counts.len() {
+                rows.to_vec()
+            } else {
+                Vec::new()
+            },
         }
     }
 

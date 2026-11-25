@@ -61,6 +61,12 @@ jobs:
       - run: cargo clippy --manifest-path formal/quint/connect/Cargo.toml --all-targets --locked -- -D warnings
       - name: Test generated exclusion inputs
         run: formal/quint/connect/bin/quint test formal/quint/generated_inputs.qnt --main GeneratedProblemsTests
+      - name: Test ranked covering search and replay Rust traces
+        run: |
+          formal/quint/connect/bin/quint test formal/quint/ranked_search.qnt --main RankedSearchTests
+          formal/quint/connect/bin/quint test formal/quint/replay.qnt --main CoveringReplayTests
+          cargo test --locked -p pytest-allpair-core --lib export_binary_covering_traces -- --ignored
+          formal/quint/connect/bin/quint test target/quint/covering_replay.qnt --main CoveringReplayCases
       - name: Test Quint Connect
         run: |
           PATH="$GITHUB_WORKSPACE/formal/quint/connect/bin:$PATH" cargo test --manifest-path formal/quint/connect/Cargo.toml --locked

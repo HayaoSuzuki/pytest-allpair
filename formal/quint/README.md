@@ -59,21 +59,34 @@ cargo test --locked -p pytest-allpair-core --test coverage_properties \
     exhausts_all_binary_row_exclusions_and_orders
 ```
 
-## Replaying Rust covering traces
+## Ranked search and Rust covering replay
 
-The replay test checks the Rust covering loop at each processed seed. An internal observer records the seed, the row appended when there is one, and the coverage cache after the step. The Rust test exports 512 executions for all three-binary-factor exclusion sets at orders one and two. They contain 4,608 steps, including already-covered and infeasible seeds.
+[`ranked_search.qnt`](ranked_search.qnt) scores a candidate by counting the new interactions that include the factor being assigned. A lower level number breaks a tie. The ranking uses the covered set from before the current seed. The expected completion is the legal row whose choices rank first at the earliest branch where the paths differ.
 
-[`replay.qnt`](replay.qnt) uses the same transition definitions as `BinaryCovering`. It starts from the corresponding model input, checks each observed event against the allowed next events, and accepts the execution once every seed has been processed. The model allows any legal completion of a seed. The existing depth-first model and final-output tests cover search and full-order enumeration.
+`RankedBinaryCovering` refines the ordered covering loop with this choice rule. TLC checked all 512 combinations of the exclusion set and coverage order one or two for three binary factors. It visited 5,120 distinct states with no violations, including the invariant that every pending seed has exactly one next event.
+
+```sh
+quint verify formal/quint/exhaustive.qnt --backend=tlc --main RankedBinaryCovering \
+    --invariants SeedEnumeration CacheMatchesSelection LegalUniqueRows \
+    ProcessedCoverage FinalCoverage NoValidCases ExactlyOneChoice --temporal Finishes
+```
+
+The replay test checks the Rust covering loop at each processed seed. An internal observer records the seed, the row appended when there is one, and the coverage cache after the step. The Rust test exports 512 executions for all three-binary-factor exclusion sets at orders one and two. They contain 4,608 steps, including already-covered and infeasible seeds. A separate four-binary-factor trace at order two adds 24 steps and exercises score recalculation after extending a partial row.
+
+[`replay.qnt`](replay.qnt) uses the same ranked transition as `RankedBinaryCovering`. It checks the exact selected row at each seed along with the cache and the remaining seed order. The dedicated CI job runs the rank unit tests, the hand-written replay cases, and all 513 Rust traces.
 
 Run from the repository root with Quint 0.33.1. The Rust exporter writes the generated Quint tests into `target/quint/`. The replay uses the TypeScript backend.
 
 ```sh
+quint test formal/quint/ranked_search.qnt --main RankedSearchTests --backend=typescript
 cargo test --locked -p pytest-allpair-core --lib export_binary_covering_traces -- --ignored
 quint test formal/quint/replay.qnt --main CoveringReplayTests --backend=typescript
 quint test target/quint/covering_replay.qnt --main CoveringReplayCases --backend=typescript
 ```
 
-The hand-written traces exercise rejection of an invalid exclusion, a missing or extra step, a wrong seed, an unsupported row, and a stale cache. In an isolated Rust copy, reversing the candidate levels within each axis combination still satisfies the exhaustive output oracle. Quint rejects the reordered trace.
+The hand-written traces exercise rejection of an invalid exclusion, a missing or extra step, a wrong seed, an unsupported row, a lower-ranked legal row, and a stale cache. In an isolated Rust copy, reversing the candidate levels within each axis combination still satisfies the exhaustive output oracle. Quint rejects the reordered trace.
+
+In isolated Rust copies, reversing the score order or scoring against the original seed changed the selected rows. The ranked replay detected both changes. The live Quint Connect test also detected a reversed full-order row sequence.
 
 ## Replaying Rust depth-first traces
 
@@ -91,7 +104,7 @@ In isolated Rust copies, the replay rejects reversed factor order and continuing
 
 ## Live model-based tests with Quint Connect
 
-Quint Connect generates ITF traces from [`model_based.qnt`](model_based.qnt). The standalone Rust test workspace in [`connect/`](connect/) decodes each sampled input and calls the public `generate` function. It compares whether a legal case exists, whether selected rows are legal and unique, and the exact set of covered interactions. Quint derives the expected state by enumerating legal rows. The model samples the example catalog and the binary exclusion tables used by the exhaustive checks.
+Quint Connect generates ITF traces from [`model_based.qnt`](model_based.qnt). The standalone Rust test workspace in [`connect/`](connect/) decodes each sampled input and calls the public `generate` function. It compares whether a legal case exists, whether selected rows are legal and unique, and the exact set of covered interactions. At full order, it also compares the sequence of all returned rows against the lexicographic enumeration of legal rows. Quint derives the expected state by enumerating legal rows. The model samples the example catalog and the binary exclusion tables used by the exhaustive checks.
 
 A separate Proptest requires all sixteen generated-input steps across the four traces of each run. It samples one to five factors, one to three levels per factor, any valid coverage order, and zero to five exclusion rules. A rule can refer to any nonempty subset of factors and can select several levels per factor. Quint's decoder tests compare all rule encodings for a mixed-level model against the Cartesian product of the allowed level subsets. In an isolated Rust copy, dropping every level except the first from each exclusion term produced a state mismatch.
 

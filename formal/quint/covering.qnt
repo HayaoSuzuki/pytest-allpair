@@ -9,6 +9,15 @@ module CoveringDomain {
     counts.foldl(Set(List()), (prefixes, count) =>
       prefixes.map(prefix => first.to(count - 1).map(level => prefix.append(level))).flatten())
 
+  // Enumerate the selected factors lexicographically and pad every other factor.
+  pure def orderedAssignments(counts: List[int], mask: Set[int]): List[Row] =
+    range(0, counts.length()).foldl(List(List()), (prefixes, axis) => {
+      val low = if (mask.contains(axis)) 0 else -1
+      val high = if (mask.contains(axis)) counts[axis] else 0
+      prefixes.foldl(List(), (rows, prefix) =>
+        range(low, high).foldl(rows, (allRows, level) => allRows.append(prefix.append(level))))
+    })
+
   pure def matchesTerm(row: Row, term: Term): bool =
     term.levels.indices().exists(i => term.levels[i] == row[term.axis])
 
