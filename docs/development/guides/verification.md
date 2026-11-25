@@ -44,8 +44,10 @@ cargo +nightly-2026-11-23 fuzz run coverage -- -runs=1000 -seed=812
 
 ## Quint model checking
 
-Quint and TLC check depth-first completion search and interaction coverage for five finite models. These include compound exclusions, full order, and a model with no legal rows. The Rust integration test exercises the public generator against the legal rows and feasible interactions exported from Quint as an ITF trace. TLC requires Java. Quint and Python regenerate the trace. The Rust test reads the checked-in trace. [Quint models and trace generation](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)
+Quint and TLC check depth-first completion search and interaction coverage. The example catalog includes compound exclusions, full order, and a model with no legal rows. A separate bounded model covers all 256 legal-row sets of three binary factors and checks the incremental coverage cache and termination. A Rust test exercises all 768 combinations of exclusion set and coverage order against the exhaustive oracle. The Rust ITF test uses the legal rows and feasible interactions that Quint exports for the example catalog. TLC requires Java. Quint and Python regenerate the trace. The Rust test reads the checked-in trace. [Quint models and trace generation](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)
 
 ```sh
 cargo test --locked -p pytest-allpair-core --test quint_coverage
+cargo test --locked -p pytest-allpair-core --test coverage_properties \
+    exhausts_all_binary_row_exclusions_and_orders
 ```

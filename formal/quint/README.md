@@ -28,6 +28,37 @@ quint verify formal/quint/covering.qnt --backend=tlc --main CoveringLoopMutant \
     --invariants ProcessedCoverage
 ```
 
+## Exhaustive checks for three binary factors
+
+[`exhaustive.qnt`](exhaustive.qnt) checks all 256 subsets of the eight binary rows. Each excluded row becomes a rule that matches all three factors. This gives one rule representation of each legal-row set. The original catalog also exercises rules that match partial assignments.
+
+- `BinaryDepthFirst` checks every partial assignment for each exclusion set. TLC started from 6,912 initial states and found no invariant violations in 50,512 reachable states.
+- `BinaryCovering` checks all 256 exclusion sets at orders one through three. It processes seeds in lexicographic order by factor indices and then by levels, as Rust does for partial orders. The model accepts any legal completion of the current seed. Rust uses the first completion from its scored search, and at full order it enumerates all legal rows directly.
+- The covering model checks that its candidate sequence matches the exhaustive projection set in the specified order, that the pending seeds remain a suffix of that sequence, that its cache equals the projections of the selected rows, and that each selected row is legal and unique. It checks coverage after each processed seed and at completion. `Finishes` checks that the seed list eventually becomes empty under weak fairness. A continuously enabled step must eventually run. TLC checked these properties from 768 initial states across 19,193 reachable states.
+
+```sh
+quint typecheck formal/quint/exhaustive.qnt
+quint verify formal/quint/exhaustive.qnt --backend=tlc --main BinaryDepthFirst \
+    --invariants CompletionConservation SearchProgress
+quint verify formal/quint/exhaustive.qnt --backend=tlc --main BinaryCovering \
+    --invariants SeedEnumeration CacheMatchesSelection LegalUniqueRows \
+    ProcessedCoverage FinalCoverage NoValidCases --temporal Finishes
+```
+
+The mutant appends a legal row without updating the cache. TLC reports a counterexample after the first selected row. In a separate copy of the model, leaving the pending list untouched also produces a counterexample to `Finishes`.
+
+```sh
+quint verify formal/quint/exhaustive.qnt --backend=tlc --main BinaryCoveringMutant \
+    --invariants CacheMatchesSelection
+```
+
+The Rust regression test exercises the same 768 inputs through `generate` and checks the returned rows against the exhaustive Rust oracle. Clearing the cache after selecting a row in an isolated copy of the generator causes the test to report duplicate rows at order one.
+
+```sh
+cargo test --locked -p pytest-allpair-core --test coverage_properties \
+    exhausts_all_binary_row_exclusions_and_orders
+```
+
 ## Rust conformance test
 
 The `Witnesses` module exports a one-state [ITF trace](https://apalache-mc.org/docs/adr/015adr-trace.html) with the catalog inputs, legal rows, and feasible interactions derived by exhaustive enumeration. Each interaction is a row with `-1` in every unselected factor. The Rust integration test calls the public `generate` function on each input and checks legality, uniqueness, exact interaction coverage, all legal rows at full order, and `NoValidCases` for an infeasible input. The test uses the checked-in trace and runs without Java or Quint. Replacing order three with order two in an isolated copy of the Rust generator fails the test on the four-factor model.

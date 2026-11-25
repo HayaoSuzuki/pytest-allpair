@@ -88,8 +88,8 @@ module CoveringExamples {
 
 module DepthFirstModel {
   import CoveringDomain.*
-  import CoveringExamples.*
 
+  const INPUTS: Set[Problem]
   const OMIT_LEVEL: bool
   type SearchContext = { problem: Problem, expected: Set[Row] }
 
@@ -115,8 +115,7 @@ module DepthFirstModel {
       total + frame.fold(0, (sum, partial) => sum + weight(counts, partial)))
 
   action init = {
-    nondet input = problems.indices().oneOf()
-    val problem = problems[input]
+    nondet problem = INPUTS.oneOf()
     nondet seed = assignments(problem.counts, -1).oneOf()
     all {
       search' = { problem: problem, expected: completions(legalRows(problem), seed) },
@@ -214,11 +213,13 @@ module CoveringLoopModel {
 }
 
 module DepthFirst {
-  import DepthFirstModel(OMIT_LEVEL = false).*
+  import CoveringExamples.*
+  import DepthFirstModel(INPUTS = problems.indices().map(i => problems[i]), OMIT_LEVEL = false).*
 }
 
 module DepthFirstMutant {
-  import DepthFirstModel(OMIT_LEVEL = true).*
+  import CoveringExamples.*
+  import DepthFirstModel(INPUTS = problems.indices().map(i => problems[i]), OMIT_LEVEL = true).*
 }
 
 module CoveringLoop {
