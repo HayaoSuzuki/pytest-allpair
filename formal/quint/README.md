@@ -4,7 +4,7 @@
 
 [`covering.qnt`](covering.qnt) uses one catalog for model checking and Rust test data. It includes compound pairwise exclusions, single-factor coverage with mixed level counts and a multi-level exclusion term, three-way coverage of four factors where pairwise coverage can omit a required triple, full order, and a model with no legal rows.
 
-- `DepthFirst` starts from every partial assignment in the catalog. It fills the first unassigned factor and explores every possible sibling order. `CompletionConservation` checks that discovered rows and the legal completions of unvisited branches together equal the legal completions of the original seed. `SearchProgress` checks that each nonterminal step reduces the remaining search weight.
+- `DepthFirst` starts from every partial assignment in the catalog. It fills the first unassigned factor and explores every possible sibling order. `CompletionConservation` checks that discovered rows and the legal completions of unvisited branches together equal the legal completions of the original seed. `SearchProgress` checks that each nonterminal step reduces the remaining search weight. `NoRepeatCompletion` checks that every discovered row is outside the branches yet to be explored.
 - `CoveringLoop` consumes one interaction per step in any order. It can choose any legal completion of an uncovered feasible interaction. The invariants check row legality, coverage of processed feasible interactions, exact final coverage, and an empty result exactly when no legal row exists.
 
 Run the models from the repository root with Quint 0.33.1 and Java 21.
@@ -12,7 +12,7 @@ Run the models from the repository root with Quint 0.33.1 and Java 21.
 ```sh
 quint typecheck formal/quint/covering.qnt
 quint verify formal/quint/covering.qnt --backend=tlc --main DepthFirst \
-    --invariants CompletionConservation SearchProgress
+    --invariants CompletionConservation SearchProgress NoRepeatCompletion
 quint verify formal/quint/covering.qnt --backend=tlc --main CoveringLoop \
     --invariants LegalRows ProcessedCoverage FinalCoverage NoValidCases
 ```
@@ -39,7 +39,7 @@ quint verify formal/quint/covering.qnt --backend=tlc --main CoveringLoopMutant \
 ```sh
 quint typecheck formal/quint/exhaustive.qnt
 quint verify formal/quint/exhaustive.qnt --backend=tlc --main BinaryDepthFirst \
-    --invariants CompletionConservation SearchProgress
+    --invariants CompletionConservation SearchProgress NoRepeatCompletion
 quint verify formal/quint/exhaustive.qnt --backend=tlc --main BinaryCovering \
     --invariants SeedEnumeration CacheMatchesSelection LegalUniqueRows \
     ProcessedCoverage FinalCoverage NoValidCases --temporal Finishes
@@ -74,6 +74,20 @@ quint test target/quint/covering_replay.qnt --main CoveringReplayCases --backend
 ```
 
 The hand-written traces exercise rejection of an invalid exclusion, a missing or extra step, a wrong seed, an unsupported row, and a stale cache. In an isolated Rust copy, reversing the candidate levels within each axis combination still satisfies the exhaustive output oracle. Quint rejects the reordered trace.
+
+## Replaying Rust depth-first traces
+
+The Rust exporter takes the five problems from the checked-in Quint ITF catalog. It runs the actual depth-first search on all 138 partial assignments. The exhaustive visitor records every completion in ascending candidate order. The first-hit visitor uses descending candidate scores and returns the first completion.
+
+The exporter records 276 executions and 775 node visits, including 152 prunes. A Quint assertion checks that the exported tests include each catalog problem, partial assignment, and termination mode exactly once. For each visit, [`depth_first_replay.qnt`](depth_first_replay.qnt) checks the current stack frame and the prune, expand, or complete decision against the same transitions that TLC checks. It also matches the visitor's delivered rows and the actual return value. An exhaustive execution must empty the frontier. A first-hit execution must return immediately on its first completion, or exhaust the frontier if no completion exists. The model allows any sibling order.
+
+```sh
+cargo test --locked -p pytest-allpair-core --lib export_depth_first_traces -- --ignored
+quint test formal/quint/depth_first_replay.qnt --main DepthFirstReplayTests --backend=typescript
+quint test target/quint/depth_first_replay.qnt --main DepthFirstReplayCases --backend=typescript
+```
+
+In isolated Rust copies, the replay rejects reversed factor order and continuing after the visitor requests a break. The reversed-factor version still satisfies the exhaustive output oracle for three binary factors.
 
 ## Rust conformance test
 

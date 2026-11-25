@@ -65,6 +65,7 @@ fn generate_with_observer(
                 rows.push(row);
                 ControlFlow::<Infallible>::Continue(())
             },
+            |_, _| {},
         );
     } else {
         let mut covered = BTreeSet::new();
@@ -86,6 +87,7 @@ fn generate_with_observer(
                     &mut partial,
                     |row, axis, level| coverage_gain(row, axis, level, order, &covered),
                     ControlFlow::Break,
+                    |_, _| {},
                 );
                 let addition =
                     match completion {
@@ -108,6 +110,13 @@ fn generate_with_observer(
     } else {
         Ok(rows)
     }
+}
+
+#[cfg_attr(test, derive(Debug))]
+enum SearchEventKind {
+    Expanded,
+    Pruned,
+    Found,
 }
 
 struct Model<'a> {
@@ -161,20 +170,25 @@ impl<'a> Model<'a> {
     }
 
     /// Visit legal completions in score order. A break returns the visitor's value.
+    /// The observer borrows the current row at the seed and each candidate decision.
     /// The stack holds choices only for the unresolved suffix of the current path.
     fn visit_completions<B>(
         &self,
         row: &mut [Option<usize>],
         score: impl Fn(&[Option<usize>], usize, usize) -> usize,
         mut visit: impl FnMut(Vec<usize>) -> ControlFlow<B>,
+        mut observe: impl FnMut(&[Option<usize>], SearchEventKind),
     ) -> ControlFlow<B> {
         if self.excludes(row) {
+            observe(row, SearchEventKind::Pruned);
             return ControlFlow::Continue(());
         }
         let gaps: Vec<_> = (0..row.len()).filter(|&axis| row[axis].is_none()).collect();
         let Some(&first) = gaps.first() else {
+            observe(row, SearchEventKind::Found);
             return visit(complete(row));
         };
+        observe(row, SearchEventKind::Expanded);
         let rank = |row: &[Option<usize>], axis: usize| {
             let mut candidates: Vec<_> = (0..self.level_counts[axis])
                 .map(|level| (std::cmp::Reverse(score(row, axis, level)), level))
@@ -191,11 +205,18 @@ impl<'a> Model<'a> {
                 Some((_, level)) => {
                     row[axis] = Some(level);
                     if self.excludes(row) {
+                        observe(row, SearchEventKind::Pruned);
                         continue;
                     }
                     match gaps.get(depth + 1) {
-                        Some(&next) => stack.push(rank(row, next)),
-                        None => visit(complete(row))?,
+                        Some(&next) => {
+                            observe(row, SearchEventKind::Expanded);
+                            stack.push(rank(row, next));
+                        }
+                        None => {
+                            observe(row, SearchEventKind::Found);
+                            visit(complete(row))?;
+                        }
                     }
                 }
                 None => {
@@ -271,3 +292,10 @@ fn digit_vectors(counts: &[usize]) -> impl Iterator<Item = Vec<usize>> + '_ {
 
 #[cfg(test)]
 mod covering_trace;
+
+#[cfg(test)]
+mod depth_first_trace;
+
+#[cfg(test)]
+#[path = "../tests/support/quint_witness.rs"]
+mod quint_witness;

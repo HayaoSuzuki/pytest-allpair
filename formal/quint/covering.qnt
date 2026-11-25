@@ -86,18 +86,17 @@ module CoveringExamples {
   )
 }
 
-module DepthFirstModel {
+module DepthFirstTransitions {
   import CoveringDomain.*
 
-  const INPUTS: Set[Problem]
-  const OMIT_LEVEL: bool
-  type SearchContext = { problem: Problem, expected: Set[Row] }
+  type SearchKind = Expanded | Pruned | Found
+  type SearchEvent = { node: Row, kind: SearchKind }
+  type SearchState = { frontier: List[Set[Row]], found: Set[Row] }
 
-  var search: SearchContext
   // The first frame holds the next siblings to visit. Children go before them.
-  var frontier: List[Set[Row]]
-  var found: Set[Row]
-  var previousWeight: int
+  pure def startSearch(seed: Row): SearchState = {
+    frontier: List(Set(seed)), found: Set(),
+  }
 
   pure def prunes(problem: Problem, partial: Row): bool =
     problem.rules.indices().exists(r =>
@@ -105,6 +104,45 @@ module DepthFirstModel {
         val term = problem.rules[r][t]
         partial[term.axis] != -1 and matchesTerm(partial, term)
       }))
+
+  pure def openAxes(node: Row): List[int] =
+    range(0, node.length()).select(axis => node[axis] == -1)
+
+  pure def searchKind(problem: Problem, node: Row): SearchKind =
+    if (prunes(problem, node)) Pruned else if (openAxes(node) == List()) Found else Expanded
+
+  // The next visit can choose any member of the newest frame.
+  pure def nextSearchEvents(problem: Problem, cursor: SearchState): Set[SearchEvent] =
+    if (cursor.frontier == List()) Set() else
+      cursor.frontier.head().map(node => { node: node, kind: searchKind(problem, node) })
+
+  // Apply a visit admitted by nextSearchEvents. The omitted level is for the pruning mutant.
+  pure def advanceSearch(problem: Problem, cursor: SearchState, event: SearchEvent, firstLevel: int): SearchState = {
+    val siblings = cursor.frontier.head().exclude(Set(event.node))
+    val rest = if (siblings == Set()) cursor.frontier.tail() else List(siblings).concat(cursor.frontier.tail())
+    val frontier = if (event.kind == Expanded) {
+      val axis = openAxes(event.node).head()
+      val children = firstLevel.to(problem.counts[axis] - 1).map(level => event.node.replaceAt(axis, level))
+      if (children == Set()) rest else List(children).concat(rest)
+    } else rest
+    {
+      frontier: frontier,
+      found: if (event.kind == Found) cursor.found.union(Set(event.node)) else cursor.found,
+    }
+  }
+}
+
+module DepthFirstModel {
+  import CoveringDomain.*
+  import DepthFirstTransitions.*
+
+  const INPUTS: Set[Problem]
+  const OMIT_LEVEL: bool
+  type SearchContext = { problem: Problem, expected: Set[Row] }
+
+  var search: SearchContext
+  var cursor: SearchState
+  var previousWeight: int
 
   pure def weight(counts: List[int], partial: Row): int =
     range(0, counts.length()).foldl(1, (total, axis) =>
@@ -119,48 +157,39 @@ module DepthFirstModel {
     nondet seed = assignments(problem.counts, -1).oneOf()
     all {
       search' = { problem: problem, expected: completions(legalRows(problem), seed) },
-      frontier' = List(Set(seed)),
-      found' = Set(),
+      cursor' = startSearch(seed),
       previousWeight' = weight(problem.counts, seed) + 1,
     }
   }
 
   action step =
-    if (frontier == List()) all {
+    if (cursor.frontier == List()) all {
       search' = search,
-      frontier' = frontier,
-      found' = found,
+      cursor' = cursor,
       previousWeight' = previousWeight,
     } else {
-      nondet partial = frontier.head().oneOf()
-      val siblings = frontier.head().exclude(Set(partial))
-      val rest = if (siblings == Set()) frontier.tail() else List(siblings).concat(frontier.tail())
-      val gaps = range(0, partial.length()).select(axis => partial[axis] == -1)
-      val pruned = prunes(search.problem, partial)
-
+      nondet event = nextSearchEvents(search.problem, cursor).oneOf()
+      val firstLevel = if (OMIT_LEVEL) 1 else 0
       all {
         search' = search,
-        previousWeight' = remainingWeight(search.problem.counts, frontier),
-        found' = if (not(pruned) and gaps == List()) found.union(Set(partial)) else found,
-        frontier' = if (pruned or gaps == List()) rest else {
-          val axis = gaps.head()
-          val first = if (OMIT_LEVEL) 1 else 0
-          val children = first.to(search.problem.counts[axis] - 1)
-            .map(level => partial.replaceAt(axis, level))
-          if (children == Set()) rest else List(children).concat(rest)
-        },
+        previousWeight' = remainingWeight(search.problem.counts, cursor.frontier),
+        cursor' = advanceSearch(search.problem, cursor, event, firstLevel),
       }
     }
 
   // Conservation proves both safe pruning and complete enumeration at exhaustion.
   val CompletionConservation = {
-    val unvisited = frontier.foldl(Set(), (remaining, frame) =>
+    val unvisited = cursor.frontier.foldl(Set(), (remaining, frame) =>
       remaining.union(frame.map(partial => completions(search.expected, partial)).flatten()))
-    found.union(unvisited) == search.expected
+    cursor.found.union(unvisited) == search.expected
   }
 
+  // A row already visited cannot be reached from any pending node.
+  val NoRepeatCompletion = cursor.frontier.foldl(true, (disjoint, frame) =>
+    disjoint and frame.forall(node => completions(cursor.found, node) == Set()))
+
   // Expanding one node replaces a factor of (levels + 1) by at most levels children.
-  val SearchProgress = remainingWeight(search.problem.counts, frontier) < previousWeight
+  val SearchProgress = remainingWeight(search.problem.counts, cursor.frontier) < previousWeight
 }
 
 module CoveringLoopModel {
