@@ -1,0 +1,18 @@
+[package]
+name = "pytest-allpair-quint-connect"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.100.0"
+license = "MIT"
+publish = false
+
+[workspace]
+members = ["."]
+resolver = "3"
+
+[dev-dependencies]
+anyhow = "1"
+proptest = "1.7"
+pytest-allpair-core = { path = "../../../crates/pytest-allpair-core" }
+quint-connect = "=0.1.2"
+serde = { version = "1", features = ["derive"] }

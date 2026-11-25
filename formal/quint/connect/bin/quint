@@ -1,0 +1,8 @@
+#!/bin/sh
+
+quint_dir=$(CDPATH= cd -P "$(dirname "$0")/../.." && pwd) || exit 1
+case "${1-}" in
+  run|test) set -- "$@" --backend=typescript ;;
+esac
+
+exec "$quint_dir/node_modules/.bin/quint" "$@"

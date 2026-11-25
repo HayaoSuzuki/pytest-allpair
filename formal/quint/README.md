@@ -89,6 +89,22 @@ quint test target/quint/depth_first_replay.qnt --main DepthFirstReplayCases --ba
 
 In isolated Rust copies, the replay rejects reversed factor order and continuing after the visitor requests a break. The reversed-factor version still satisfies the exhaustive output oracle for three binary factors.
 
+## Live model-based tests with Quint Connect
+
+Quint Connect generates ITF traces from [`model_based.qnt`](model_based.qnt). The standalone Rust test workspace in [`connect/`](connect/) decodes each sampled input and calls the public `generate` function. It compares whether a legal case exists, whether selected rows are legal and unique, and the exact set of covered interactions. Quint derives the expected state by enumerating legal rows. The model samples the example catalog and the binary exclusion tables used by the exhaustive checks.
+
+The fixed seed exercises the bridge. The negative control lowers the Rust request from three-way to pairwise coverage and requires Quint Connect to report a state mismatch. Proptest generates Quint seeds and equivalent rule encodings by repeating and reversing rules and reversing the order of their terms and levels. A failure reports the seed and the rule encoding selected by Proptest.
+
+The dedicated CI job installs Quint 0.33.1 with npm and uses the TypeScript evaluator. On Linux or macOS, run the same test from the repository root with Node 22 and the repository's Rust toolchain.
+
+```sh
+npm ci --prefix formal/quint --ignore-scripts --no-audit --no-fund
+PATH="$PWD/formal/quint/connect/bin:$PATH" \
+    cargo test --manifest-path formal/quint/connect/Cargo.toml --locked
+```
+
+Set `PROPTEST_RNG_SEED` to reproduce a Proptest run. Use `QUINT_VERBOSE=1` and pass `-- --nocapture` to Cargo to see generated actions and state differences.
+
 ## Rust conformance test
 
 The `Witnesses` module exports a one-state [ITF trace](https://apalache-mc.org/docs/adr/015adr-trace.html) with the catalog inputs, legal rows, and feasible interactions derived by exhaustive enumeration. Each interaction is a row with `-1` in every unselected factor. The Rust integration test calls the public `generate` function on each input and checks legality, uniqueness, exact interaction coverage, all legal rows at full order, and `NoValidCases` for an infeasible input. The test uses the checked-in trace and runs without Java or Quint. Replacing order three with order two in an isolated copy of the Rust generator fails the test on the four-factor model.
