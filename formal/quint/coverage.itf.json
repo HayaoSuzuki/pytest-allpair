@@ -1,0 +1,1012 @@
+{
+  "#meta": {
+    "format": "ITF",
+    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
+    "source": "formal/quint/covering.qnt",
+    "status": "ok"
+  },
+  "vars": [
+    "cases"
+  ],
+  "states": [
+    {
+      "#meta": {
+        "index": 0
+      },
+      "cases": [
+        {
+          "counts": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "feasible": {
+            "#set": [
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ]
+            ]
+          },
+          "legalRows": {
+            "#set": [
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ]
+            ]
+          },
+          "name": "compound exclusions",
+          "order": {
+            "#bigint": "2"
+          },
+          "rules": [
+            [
+              {
+                "axis": {
+                  "#bigint": "0"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "1"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "2"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "axis": {
+                  "#bigint": "0"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "1"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "2"
+                },
+                "levels": [
+                  {
+                    "#bigint": "1"
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        {
+          "counts": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "3"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "feasible": {
+            "#set": [
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "2"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ]
+            ]
+          },
+          "legalRows": {
+            "#set": [
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "2"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ]
+            ]
+          },
+          "name": "single-factor coverage with mixed levels",
+          "order": {
+            "#bigint": "1"
+          },
+          "rules": [
+            [
+              {
+                "axis": {
+                  "#bigint": "1"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  },
+                  {
+                    "#bigint": "2"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "2"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        {
+          "counts": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            }
+          ],
+          "feasible": {
+            "#set": [
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "-1"
+                }
+              ]
+            ]
+          },
+          "legalRows": {
+            "#set": [
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ]
+            ]
+          },
+          "name": "three-way coverage of four factors",
+          "order": {
+            "#bigint": "3"
+          },
+          "rules": [
+            [
+              {
+                "axis": {
+                  "#bigint": "0"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "1"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "axis": {
+                  "#bigint": "0"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "2"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "axis": {
+                  "#bigint": "1"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "2"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        {
+          "counts": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "feasible": {
+            "#set": [
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ]
+            ]
+          },
+          "legalRows": {
+            "#set": [
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "0"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ]
+            ]
+          },
+          "name": "full order",
+          "order": {
+            "#bigint": "2"
+          },
+          "rules": [
+            [
+              {
+                "axis": {
+                  "#bigint": "0"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  }
+                ]
+              },
+              {
+                "axis": {
+                  "#bigint": "1"
+                },
+                "levels": [
+                  {
+                    "#bigint": "1"
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        {
+          "counts": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "feasible": {
+            "#set": []
+          },
+          "legalRows": {
+            "#set": []
+          },
+          "name": "no valid cases",
+          "order": {
+            "#bigint": "1"
+          },
+          "rules": [
+            [
+              {
+                "axis": {
+                  "#bigint": "0"
+                },
+                "levels": [
+                  {
+                    "#bigint": "0"
+                  },
+                  {
+                    "#bigint": "1"
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -42,4 +42,10 @@ cargo install cargo-fuzz --version 0.13.2 --locked
 cargo +nightly-2026-11-23 fuzz run coverage -- -runs=1000 -seed=812
 ```
 
-The Quint and TLC experiment checks pruning for three binary factors. Counterexamples from the model map to Rust regression cases. Only the experiment requires Java and Quint. [Quint and TLC experiment](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)
+## Quint model checking
+
+Quint and TLC check depth-first completion search and interaction coverage for five finite models. These include compound exclusions, full order, and a model with no legal rows. The Rust integration test exercises the public generator against the legal rows and feasible interactions exported from Quint as an ITF trace. TLC requires Java. Quint and Python regenerate the trace. The Rust test reads the checked-in trace. [Quint models and trace generation](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)
+
+```sh
+cargo test --locked -p pytest-allpair-core --test quint_coverage
+```

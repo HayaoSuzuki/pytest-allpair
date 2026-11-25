@@ -1,4 +1,60 @@
-# Finite model of pruning
+# Quint models for coverage and pruning
+
+## Coverage models
+
+[`covering.qnt`](covering.qnt) uses one catalog for model checking and Rust test data. It includes compound pairwise exclusions, single-factor coverage with mixed level counts and a multi-level exclusion term, three-way coverage of four factors where pairwise coverage can omit a required triple, full order, and a model with no legal rows.
+
+- `DepthFirst` starts from every partial assignment in the catalog. It fills the first unassigned factor and explores every possible sibling order. `CompletionConservation` checks that discovered rows and the legal completions of unvisited branches together equal the legal completions of the original seed. `SearchProgress` checks that each nonterminal step reduces the remaining search weight.
+- `CoveringLoop` consumes one interaction per step in any order. It can choose any legal completion of an uncovered feasible interaction. The invariants check row legality, coverage of processed feasible interactions, exact final coverage, and an empty result exactly when no legal row exists.
+
+Run the models from the repository root with Quint 0.33.1 and Java 21.
+
+```sh
+quint typecheck formal/quint/covering.qnt
+quint verify formal/quint/covering.qnt --backend=tlc --main DepthFirst \
+    --invariants CompletionConservation SearchProgress
+quint verify formal/quint/covering.qnt --backend=tlc --main CoveringLoop \
+    --invariants LegalRows ProcessedCoverage FinalCoverage NoValidCases
+```
+
+TLC checked 1,230 reachable states in `DepthFirst` and 1,720,037 in `CoveringLoop` with no violations. The catalog bounds this result. The coverage loop abstracts search through the contract that an uncovered feasible interaction has a legal completion. The depth-first model checks the contract for these inputs and abstracts the generator's scoring by allowing any sibling order. The covering model derives covered interactions from its selected rows. The Rust generator maintains an incremental set.
+
+Each command below should exit with a counterexample. `DepthFirstMutant` drops level zero from a branch. `CoveringLoopMutant` skips an uncovered feasible pair.
+
+```sh
+quint verify formal/quint/covering.qnt --backend=tlc --main DepthFirstMutant \
+    --invariants CompletionConservation
+quint verify formal/quint/covering.qnt --backend=tlc --main CoveringLoopMutant \
+    --invariants ProcessedCoverage
+```
+
+## Rust conformance test
+
+The `Witnesses` module exports a one-state [ITF trace](https://apalache-mc.org/docs/adr/015adr-trace.html) with the catalog inputs, legal rows, and feasible interactions derived by exhaustive enumeration. Each interaction is a row with `-1` in every unselected factor. The Rust integration test calls the public `generate` function on each input and checks legality, uniqueness, exact interaction coverage, all legal rows at full order, and `NoValidCases` for an infeasible input. The test uses the checked-in trace and runs without Java or Quint. Replacing order three with order two in an isolated copy of the Rust generator fails the test on the four-factor model.
+
+```sh
+cargo test --locked -p pytest-allpair-core --test quint_coverage
+```
+
+When the catalog or its expected results change, regenerate the trace from the repository root. Remove the two time-dependent metadata fields so the file is reproducible.
+
+```sh
+quint run formal/quint/covering.qnt --main Witnesses --backend=typescript \
+    --max-steps=0 --max-samples=1 --seed=1 --verbosity=0 \
+    --out-itf=formal/quint/coverage.itf.json
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("formal/quint/coverage.itf.json")
+trace = json.loads(path.read_text(encoding="utf-8"))
+for field in ("description", "timestamp"):
+    trace["#meta"].pop(field, None)
+path.write_text(json.dumps(trace, indent=2) + "\n", encoding="utf-8")
+PY
+```
+
+## Pruning model
 
 The model uses three binary factors, A, B, and C. It excludes rows where A and B are both 0 and represents unassigned values as `-1`. The `SoundPrune` invariant enumerates valid rows to check that no discarded assignment can extend to a valid complete case.
 
