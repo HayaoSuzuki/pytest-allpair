@@ -44,6 +44,16 @@ pub fn generate(
     order: usize,
     forbidden: &[ForbiddenRule],
 ) -> Result<Vec<Vec<usize>>, GenerateError> {
+    generate_with_observer(level_counts, order, forbidden, |_, _, _| {})
+}
+
+// The observer borrows the cache and any row appended after each partial-order seed.
+fn generate_with_observer(
+    level_counts: &[usize],
+    order: usize,
+    forbidden: &[ForbiddenRule],
+    mut observe: impl FnMut(&Projection, Option<&[usize]>, &BTreeSet<Projection>),
+) -> Result<Vec<Vec<usize>>, GenerateError> {
     let model = Model::new(level_counts, order, forbidden)?;
     let mut rows = Vec::new();
 
@@ -63,12 +73,13 @@ pub fn generate(
             for levels in digit_vectors(&counts) {
                 let seed: Projection = axes.iter().copied().zip(levels).collect();
                 if covered.contains(&seed) {
+                    observe(&seed, None, &covered);
                     continue;
                 }
 
                 // A seed is infeasible only after searching all its completions.
                 let mut partial = vec![None; level_counts.len()];
-                for (axis, level) in seed {
+                for &(axis, level) in &seed {
                     partial[axis] = Some(level);
                 }
                 let completion = model.visit_completions(
@@ -76,13 +87,18 @@ pub fn generate(
                     |row, axis, level| coverage_gain(row, axis, level, order, &covered),
                     ControlFlow::Break,
                 );
-                if let ControlFlow::Break(row) = completion {
-                    covered.extend(
-                        combinations(level_counts.len(), order)
-                            .map(|axes| axes.into_iter().map(|axis| (axis, row[axis])).collect()),
-                    );
-                    rows.push(row);
-                }
+                let addition =
+                    match completion {
+                        ControlFlow::Break(row) => {
+                            covered.extend(combinations(level_counts.len(), order).map(|axes| {
+                                axes.into_iter().map(|axis| (axis, row[axis])).collect()
+                            }));
+                            rows.push(row);
+                            rows.last().map(Vec::as_slice)
+                        }
+                        ControlFlow::Continue(()) => None,
+                    };
+                observe(&seed, addition, &covered);
             }
         }
     }
@@ -252,3 +268,6 @@ fn digit_vectors(counts: &[usize]) -> impl Iterator<Item = Vec<usize>> + '_ {
         Some(current)
     })
 }
+
+#[cfg(test)]
+mod covering_trace;

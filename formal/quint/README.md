@@ -59,6 +59,22 @@ cargo test --locked -p pytest-allpair-core --test coverage_properties \
     exhausts_all_binary_row_exclusions_and_orders
 ```
 
+## Replaying Rust covering traces
+
+The replay test checks the Rust covering loop at each processed seed. An internal observer records the seed, the row appended when there is one, and the coverage cache after the step. The Rust test exports 512 executions for all three-binary-factor exclusion sets at orders one and two. They contain 4,608 steps, including already-covered and infeasible seeds.
+
+[`replay.qnt`](replay.qnt) uses the same transition definitions as `BinaryCovering`. It starts from the corresponding model input, checks each observed event against the allowed next events, and accepts the execution once every seed has been processed. The model allows any legal completion of a seed. The existing depth-first model and final-output tests cover search and full-order enumeration.
+
+Run from the repository root with Quint 0.33.1. The Rust exporter writes the generated Quint tests into `target/quint/`. The replay uses the TypeScript backend.
+
+```sh
+cargo test --locked -p pytest-allpair-core --lib export_binary_covering_traces -- --ignored
+quint test formal/quint/replay.qnt --main CoveringReplayTests --backend=typescript
+quint test target/quint/covering_replay.qnt --main CoveringReplayCases --backend=typescript
+```
+
+The hand-written traces exercise rejection of an invalid exclusion, a missing or extra step, a wrong seed, an unsupported row, and a stale cache. In an isolated Rust copy, reversing the candidate levels within each axis combination still satisfies the exhaustive output oracle. Quint rejects the reordered trace.
+
 ## Rust conformance test
 
 The `Witnesses` module exports a one-state [ITF trace](https://apalache-mc.org/docs/adr/015adr-trace.html) with the catalog inputs, legal rows, and feasible interactions derived by exhaustive enumeration. Each interaction is a row with `-1` in every unselected factor. The Rust integration test calls the public `generate` function on each input and checks legality, uniqueness, exact interaction coverage, all legal rows at full order, and `NoValidCases` for an infeasible input. The test uses the checked-in trace and runs without Java or Quint. Replacing order three with order two in an isolated copy of the Rust generator fails the test on the four-factor model.
