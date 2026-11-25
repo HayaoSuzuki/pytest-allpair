@@ -93,12 +93,15 @@ In isolated Rust copies, the replay rejects reversed factor order and continuing
 
 Quint Connect generates ITF traces from [`model_based.qnt`](model_based.qnt). The standalone Rust test workspace in [`connect/`](connect/) decodes each sampled input and calls the public `generate` function. It compares whether a legal case exists, whether selected rows are legal and unique, and the exact set of covered interactions. Quint derives the expected state by enumerating legal rows. The model samples the example catalog and the binary exclusion tables used by the exhaustive checks.
 
+A separate Proptest requires all sixteen generated-input steps across the four traces of each run. It samples one to five factors, one to three levels per factor, any valid coverage order, and zero to five exclusion rules. A rule can refer to any nonempty subset of factors and can select several levels per factor. Quint's decoder tests compare all rule encodings for a mixed-level model against the Cartesian product of the allowed level subsets. In an isolated Rust copy, dropping every level except the first from each exclusion term produced a state mismatch.
+
 The fixed seed exercises the bridge. The negative control lowers the Rust request from three-way to pairwise coverage and requires Quint Connect to report a state mismatch. Proptest generates Quint seeds and equivalent rule encodings by repeating and reversing rules and reversing the order of their terms and levels. A failure reports the seed and the rule encoding selected by Proptest.
 
 The dedicated CI job installs Quint 0.33.1 with npm and uses the TypeScript evaluator. On Linux or macOS, run the same test from the repository root with Node 22 and the repository's Rust toolchain.
 
 ```sh
 npm ci --prefix formal/quint --ignore-scripts --no-audit --no-fund
+formal/quint/connect/bin/quint test formal/quint/generated_inputs.qnt --main GeneratedProblemsTests
 PATH="$PWD/formal/quint/connect/bin:$PATH" \
     cargo test --manifest-path formal/quint/connect/Cargo.toml --locked
 ```

@@ -59,6 +59,8 @@ jobs:
       - run: npm ci --prefix formal/quint --ignore-scripts --no-audit --no-fund
       - run: cargo fmt --manifest-path formal/quint/connect/Cargo.toml --check
       - run: cargo clippy --manifest-path formal/quint/connect/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Test generated exclusion inputs
+        run: formal/quint/connect/bin/quint test formal/quint/generated_inputs.qnt --main GeneratedProblemsTests
       - name: Test Quint Connect
         run: |
           PATH="$GITHUB_WORKSPACE/formal/quint/connect/bin:$PATH" cargo test --manifest-path formal/quint/connect/Cargo.toml --locked

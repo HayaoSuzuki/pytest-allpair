@@ -82,13 +82,14 @@ mod tests {
         covered: BTreeSet<Vec<i64>>,
     }
 
-    struct CoverageDriver {
+    struct CoverageDriver<'a> {
         encoding: RuleEncoding,
         order: GeneratorOrder,
         observed: Option<Observation>,
+        generated_steps: &'a mut usize,
     }
 
-    impl CoverageDriver {
+    impl CoverageDriver<'_> {
         fn evaluate(&mut self, scenario: Scenario) -> Result {
             let order = match self.order {
                 GeneratorOrder::Requested => scenario.order,
@@ -109,8 +110,8 @@ mod tests {
         }
     }
 
-    impl State<CoverageDriver> for Observation {
-        fn from_driver(driver: &CoverageDriver) -> Result<Self> {
+    impl State<CoverageDriver<'_>> for Observation {
+        fn from_driver(driver: &CoverageDriver<'_>) -> Result<Self> {
             driver
                 .observed
                 .clone()
@@ -118,7 +119,7 @@ mod tests {
         }
     }
 
-    impl Driver for CoverageDriver {
+    impl Driver for CoverageDriver<'_> {
         type State = Observation;
 
         fn config() -> Config {
@@ -133,6 +134,10 @@ mod tests {
                 init(scenario) => self.evaluate(scenario)?,
                 sampleCatalog(scenario) => self.evaluate(scenario)?,
                 sampleBinary(scenario) => self.evaluate(scenario)?,
+                sampleGenerated(scenario) => {
+                    self.evaluate(scenario)?;
+                    *self.generated_steps += 1;
+                },
             })
         }
     }
@@ -145,7 +150,7 @@ mod tests {
             }
         }
 
-        // The fixture families have at most four factors.
+        // The model families have at most five factors.
         let masks = (0_usize..(1 << scenario.counts.len()))
             .filter(|mask| mask.count_ones() as usize == scenario.order);
         let mut covered = BTreeSet::new();
@@ -169,40 +174,88 @@ mod tests {
         }
     }
 
-    fn run(seed: u32, encoding: RuleEncoding, order: GeneratorOrder) -> Result {
+    enum TraceMode {
+        Examples,
+        Generated(&'static str),
+    }
+
+    fn run(seed: u32, encoding: RuleEncoding, order: GeneratorOrder, mode: TraceMode) -> Result {
+        const TRACE_COUNT: usize = 4;
+        const STEPS_PER_TRACE: usize = 4;
+
+        let (step, expected_generated) = match mode {
+            TraceMode::Examples => ("step", None),
+            TraceMode::Generated(step) => (step, Some(TRACE_COUNT * STEPS_PER_TRACE)),
+        };
+        let mut generated_steps = 0;
         runner::run_test(
             CoverageDriver {
                 encoding,
                 order,
                 observed: None,
+                generated_steps: &mut generated_steps,
             },
             runner::Config {
-                test_name: format!("covering array seed {seed}"),
+                test_name: format!("covering array {step}, seed {seed}"),
                 gen_config: RunConfig {
                     spec: format!("{}/../model_based.qnt", env!("CARGO_MANIFEST_DIR")),
                     main: Some("ConnectCoverage".into()),
                     init: None,
-                    step: None,
-                    max_samples: Some(4),
-                    max_steps: Some(4),
+                    step: Some(step.into()),
+                    max_samples: Some(TRACE_COUNT),
+                    max_steps: Some(STEPS_PER_TRACE),
                     seed: seed.to_string(),
                 },
             },
-        )
+        )?;
+        if let Some(expected) = expected_generated {
+            anyhow::ensure!(
+                generated_steps == expected,
+                "seed {seed}: expected {expected} generated steps, observed {generated_steps}",
+            );
+        }
+        Ok(())
     }
 
     #[test]
     fn fixed_quint_traces_match_the_generator() -> Result {
-        run(42, RuleEncoding::default(), GeneratorOrder::Requested)
+        run(
+            42,
+            RuleEncoding::default(),
+            GeneratorOrder::Requested,
+            TraceMode::Examples,
+        )
     }
 
     #[test]
     fn quint_trace_detects_lowered_coverage_order() {
-        let error = run(42, RuleEncoding::default(), GeneratorOrder::Lowered)
-            .expect_err("the three-way model must reject a missing triple");
+        let error = run(
+            42,
+            RuleEncoding::default(),
+            GeneratorOrder::Lowered,
+            TraceMode::Examples,
+        )
+        .expect_err("the three-way model must reject a missing triple");
         assert!(
             error.to_string().contains("State invariant failed"),
             "{error:#}",
+        );
+    }
+
+    #[test]
+    fn rejects_traces_without_generated_steps() {
+        let error = run(
+            42,
+            RuleEncoding::default(),
+            GeneratorOrder::Requested,
+            TraceMode::Generated("false"),
+        )
+        .expect_err("the run must visit the generated action");
+        assert!(
+            error
+                .to_string()
+                .contains("expected 16 generated steps, observed 0"),
+            "{error:#}"
         );
     }
 
@@ -216,7 +269,18 @@ mod tests {
             reverse in any::<bool>(),
         ) {
             let encoding = RuleEncoding { extra_copies, reverse };
-            let result = run(seed, encoding, GeneratorOrder::Requested);
+            let result = run(seed, encoding, GeneratorOrder::Requested, TraceMode::Examples);
+            prop_assert!(result.is_ok(), "{result:#?}");
+        }
+
+        #[test]
+        fn generated_factor_shapes_and_exclusions_match_the_generator(
+            seed in any::<u32>(),
+            extra_copies in 0_usize..=3,
+            reverse in any::<bool>(),
+        ) {
+            let encoding = RuleEncoding { extra_copies, reverse };
+            let result = run(seed, encoding, GeneratorOrder::Requested, TraceMode::Generated("sampleGenerated"));
             prop_assert!(result.is_ok(), "{result:#?}");
         }
     }
