@@ -42,4 +42,12 @@ cargo install cargo-fuzz --version 0.13.2 --locked
 cargo +nightly-2026-11-23 fuzz run coverage -- -runs=1000 -seed=812
 ```
 
-The Quint and TLC experiment checks pruning for three binary factors. Counterexamples from the model map to Rust regression cases. Only the experiment requires Java and Quint. [Quint and TLC experiment](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)
+## Quint model checking
+
+Quint and TLC check depth-first completion search and interaction coverage. The example catalog includes compound exclusions, full order, and a model with no legal rows. A separate bounded model covers all 256 legal-row sets of three binary factors and checks the incremental coverage cache and termination. A Rust test exercises all 768 combinations of exclusion set and coverage order against the exhaustive oracle. Quint also replays 513 Rust executions and checks candidate order, the row selected by the coverage score and tie-break, and the cache at each step. The live Quint Connect tests check the order of the returned rows at full coverage order. The depth-first replay checks 276 Rust executions from that catalog, including branch pruning, visit order, and the visitor's return. The Rust ITF output test uses the legal rows and feasible interactions that Quint exports for the example catalog. TLC requires Java. Quint and Python regenerate the trace. The Rust test reads the checked-in trace. The dedicated Quint Connect CI job also generates ITF executions and checks the public generator. Proptest supplies the Quint seed and varies the representation of equivalent exclusions. The generated-input suite samples one to five factors and up to five exclusion rules, with one to three levels per factor. [Quint models and trace generation](https://github.com/HayaoSuzuki/pytest-allpair/blob/main/formal/quint/README.md)
+
+```sh
+cargo test --locked -p pytest-allpair-core --test quint_coverage
+cargo test --locked -p pytest-allpair-core --test coverage_properties \
+    exhausts_all_binary_row_exclusions_and_orders
+```

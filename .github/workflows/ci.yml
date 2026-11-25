@@ -45,6 +45,32 @@ jobs:
       - run: rustup toolchain install nightly-2026-11-23 --profile minimal
       - run: cargo +nightly-2026-11-23 test --workspace --locked -- -Z unstable-options --shuffle
 
+  quint-connect:
+    name: Quint Connect
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: npm ci --prefix formal/quint --ignore-scripts --no-audit --no-fund
+      - run: cargo fmt --manifest-path formal/quint/connect/Cargo.toml --check
+      - run: cargo clippy --manifest-path formal/quint/connect/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Test generated exclusion inputs
+        run: formal/quint/connect/bin/quint test formal/quint/generated_inputs.qnt --main GeneratedProblemsTests
+      - name: Test ranked covering search and replay Rust traces
+        run: |
+          formal/quint/connect/bin/quint test formal/quint/ranked_search.qnt --main RankedSearchTests
+          formal/quint/connect/bin/quint test formal/quint/replay.qnt --main CoveringReplayTests
+          cargo test --locked -p pytest-allpair-core --lib export_binary_covering_traces -- --ignored
+          formal/quint/connect/bin/quint test target/quint/covering_replay.qnt --main CoveringReplayCases
+      - name: Test Quint Connect
+        run: |
+          PATH="$GITHUB_WORKSPACE/formal/quint/connect/bin:$PATH" cargo test --manifest-path formal/quint/connect/Cargo.toml --locked
+
   fuzz:
     name: Fuzz (bounded)
     uses: ./.github/workflows/fuzz.yml
@@ -103,13 +129,14 @@ jobs:
 
   result:
     name: CI result
-    needs: [rust, rust-shuffle, fuzz, pytest, quality, wheels]
+    needs: [rust, rust-shuffle, quint-connect, fuzz, pytest, quality, wheels]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       RUST_RESULT: ${{ needs.rust.result }}
       RUST_SHUFFLE_RESULT: ${{ needs.rust-shuffle.result }}
+      QUINT_CONNECT_RESULT: ${{ needs.quint-connect.result }}
       FUZZ_RESULT: ${{ needs.fuzz.result }}
       PYTEST_RESULT: ${{ needs.pytest.result }}
       QUALITY_RESULT: ${{ needs.quality.result }}
@@ -117,6 +144,6 @@ jobs:
     steps:
       - name: Report required job outcomes
         run: |
-          for outcome in "$RUST_RESULT" "$RUST_SHUFFLE_RESULT" "$FUZZ_RESULT" "$PYTEST_RESULT" "$QUALITY_RESULT" "$WHEELS_RESULT"; do
+          for outcome in "$RUST_RESULT" "$RUST_SHUFFLE_RESULT" "$QUINT_CONNECT_RESULT" "$FUZZ_RESULT" "$PYTEST_RESULT" "$QUALITY_RESULT" "$WHEELS_RESULT"; do
             test "$outcome" = success
           done

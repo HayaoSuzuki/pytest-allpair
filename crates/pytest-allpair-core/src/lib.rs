@@ -44,6 +44,16 @@ pub fn generate(
     order: usize,
     forbidden: &[ForbiddenRule],
 ) -> Result<Vec<Vec<usize>>, GenerateError> {
+    generate_with_observer(level_counts, order, forbidden, |_, _, _| {})
+}
+
+// The observer borrows the cache and any row appended after each partial-order seed.
+fn generate_with_observer(
+    level_counts: &[usize],
+    order: usize,
+    forbidden: &[ForbiddenRule],
+    mut observe: impl FnMut(&Projection, Option<&[usize]>, &BTreeSet<Projection>),
+) -> Result<Vec<Vec<usize>>, GenerateError> {
     let model = Model::new(level_counts, order, forbidden)?;
     let mut rows = Vec::new();
 
@@ -55,6 +65,7 @@ pub fn generate(
                 rows.push(row);
                 ControlFlow::<Infallible>::Continue(())
             },
+            |_, _| {},
         );
     } else {
         let mut covered = BTreeSet::new();
@@ -63,26 +74,33 @@ pub fn generate(
             for levels in digit_vectors(&counts) {
                 let seed: Projection = axes.iter().copied().zip(levels).collect();
                 if covered.contains(&seed) {
+                    observe(&seed, None, &covered);
                     continue;
                 }
 
                 // A seed is infeasible only after searching all its completions.
                 let mut partial = vec![None; level_counts.len()];
-                for (axis, level) in seed {
+                for &(axis, level) in &seed {
                     partial[axis] = Some(level);
                 }
                 let completion = model.visit_completions(
                     &mut partial,
                     |row, axis, level| coverage_gain(row, axis, level, order, &covered),
                     ControlFlow::Break,
+                    |_, _| {},
                 );
-                if let ControlFlow::Break(row) = completion {
-                    covered.extend(
-                        combinations(level_counts.len(), order)
-                            .map(|axes| axes.into_iter().map(|axis| (axis, row[axis])).collect()),
-                    );
-                    rows.push(row);
-                }
+                let addition =
+                    match completion {
+                        ControlFlow::Break(row) => {
+                            covered.extend(combinations(level_counts.len(), order).map(|axes| {
+                                axes.into_iter().map(|axis| (axis, row[axis])).collect()
+                            }));
+                            rows.push(row);
+                            rows.last().map(Vec::as_slice)
+                        }
+                        ControlFlow::Continue(()) => None,
+                    };
+                observe(&seed, addition, &covered);
             }
         }
     }
@@ -92,6 +110,13 @@ pub fn generate(
     } else {
         Ok(rows)
     }
+}
+
+#[cfg_attr(test, derive(Debug))]
+enum SearchEventKind {
+    Expanded,
+    Pruned,
+    Found,
 }
 
 struct Model<'a> {
@@ -145,20 +170,25 @@ impl<'a> Model<'a> {
     }
 
     /// Visit legal completions in score order. A break returns the visitor's value.
+    /// The observer borrows the current row at the seed and each candidate decision.
     /// The stack holds choices only for the unresolved suffix of the current path.
     fn visit_completions<B>(
         &self,
         row: &mut [Option<usize>],
         score: impl Fn(&[Option<usize>], usize, usize) -> usize,
         mut visit: impl FnMut(Vec<usize>) -> ControlFlow<B>,
+        mut observe: impl FnMut(&[Option<usize>], SearchEventKind),
     ) -> ControlFlow<B> {
         if self.excludes(row) {
+            observe(row, SearchEventKind::Pruned);
             return ControlFlow::Continue(());
         }
         let gaps: Vec<_> = (0..row.len()).filter(|&axis| row[axis].is_none()).collect();
         let Some(&first) = gaps.first() else {
+            observe(row, SearchEventKind::Found);
             return visit(complete(row));
         };
+        observe(row, SearchEventKind::Expanded);
         let rank = |row: &[Option<usize>], axis: usize| {
             let mut candidates: Vec<_> = (0..self.level_counts[axis])
                 .map(|level| (std::cmp::Reverse(score(row, axis, level)), level))
@@ -175,11 +205,18 @@ impl<'a> Model<'a> {
                 Some((_, level)) => {
                     row[axis] = Some(level);
                     if self.excludes(row) {
+                        observe(row, SearchEventKind::Pruned);
                         continue;
                     }
                     match gaps.get(depth + 1) {
-                        Some(&next) => stack.push(rank(row, next)),
-                        None => visit(complete(row))?,
+                        Some(&next) => {
+                            observe(row, SearchEventKind::Expanded);
+                            stack.push(rank(row, next));
+                        }
+                        None => {
+                            observe(row, SearchEventKind::Found);
+                            visit(complete(row))?;
+                        }
                     }
                 }
                 None => {
@@ -252,3 +289,13 @@ fn digit_vectors(counts: &[usize]) -> impl Iterator<Item = Vec<usize>> + '_ {
         Some(current)
     })
 }
+
+#[cfg(test)]
+mod covering_trace;
+
+#[cfg(test)]
+mod depth_first_trace;
+
+#[cfg(test)]
+#[path = "../tests/support/quint_witness.rs"]
+mod quint_witness;

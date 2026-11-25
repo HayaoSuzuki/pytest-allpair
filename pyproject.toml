@@ -27,6 +27,7 @@ module-name = "pytest_allpair._native"
 include = [
     { path = "rust-toolchain.toml", format = "sdist" },
     { path = "formal/coverage_oracle.rs", format = "sdist" },
+    { path = "formal/quint/coverage.itf.json", format = "sdist" },
 ]
 
 [tool.maturin.sbom]
